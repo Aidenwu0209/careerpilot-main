@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 from sqlalchemy import delete, select
@@ -21,11 +22,16 @@ def _ocr_needs_refresh(ocr: dict | None) -> bool:
     if not text:
         return False
     head = text[:2000]
+    structured = ocr.get("structured_json") or {}
     return (
         head.startswith("%PDF")
         or head.startswith("PK")
         or "\x00" in head
         or head.count("\ufffd") > 10
+        or (
+            not structured.get("skills")
+            and bool(re.search(r"(?i)p\s*y\s*t\s*h\s*o\s*n|j\s*a\s*v\s*a|s\s*q\s*l|e\s*x\s*c\s*e\s*l|数\s*据\s*分\s*析", head))
+        )
     )
 
 
@@ -78,6 +84,14 @@ class StudentProfileService:
                 merged["certificates"].extend(structured.get("certificates", []))
                 merged["projects"].extend(structured.get("projects", []))
                 merged["internships"].extend(structured.get("internships", []))
+                if structured.get("target_job"):
+                    student.career_goal = structured.get("target_job")
+                    merged["preferences"]["target_job"] = structured.get("target_job")
+                    evidence_items.append({
+                        "source": uploaded.file_name,
+                        "excerpt": f"OCR 解析意向岗位：{structured.get('target_job')}",
+                        "confidence": 0.9,
+                    })
                 merged["source_summary"] += f"{uploaded.file_name}；"
                 for skill in structured.get("skills", []):
                     evidence_items.append({"source": uploaded.file_name, "excerpt": f"OCR 提取技能：{skill}", "confidence": 0.9})

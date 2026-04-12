@@ -24,7 +24,23 @@ class BaseOCRProvider(ABC):
 
 
 def _extract_keywords(text: str, candidates: list[str]) -> list[str]:
-    return [item for item in candidates if item.lower() in text.lower()]
+    normalized_text = _normalize_for_match(text)
+    return [
+        item for item in candidates
+        if _normalize_for_match(item) in normalized_text
+    ]
+
+
+def _normalize_ocr_text(text: str) -> str:
+    # Some PDF text layers are extracted as "P y t h o n" or "数 据 分 析".
+    # Collapse spaces inside continuous English/digit/Chinese tokens before parsing.
+    text = re.sub(r"(?<=[A-Za-z0-9])[ \t]+(?=[A-Za-z0-9])", "", text)
+    text = re.sub(r"(?<=[\u4e00-\u9fff])[ \t]+(?=[\u4e00-\u9fff])", "", text)
+    return text
+
+
+def _normalize_for_match(text: str) -> str:
+    return re.sub(r"\s+", "", _normalize_ocr_text(text).lower())
 
 
 def _extract_gpa(text: str) -> Optional[float]:
@@ -37,6 +53,22 @@ def _extract_major(text: str) -> str:
     if explicit:
         return explicit.group(2).strip()
 
+    known_majors = [
+        "计算机科学与技术",
+        "数据科学与大数据技术",
+        "软件工程",
+        "人工智能",
+        "网络工程",
+        "信息管理与信息系统",
+        "数字媒体技术",
+    ]
+    for major in known_majors:
+        if re.search(rf"{re.escape(major)}\s*专业", text):
+            return major
+    for major in known_majors:
+        if major in text:
+            return major
+
     degree_line = re.search(r"([^\n|｜]{2,30})\s*[|｜]\s*(本科|硕士|博士|专科)", text)
     if degree_line:
         candidate = degree_line.group(1).strip()
@@ -48,12 +80,21 @@ def _extract_major(text: str) -> str:
 def _extract_name(text: str) -> str:
     explicit = re.search(r"姓名[:： ]*([^\n]+)", text)
     if explicit:
-        return explicit.group(1).strip()
+        value = re.split(r"意向岗位|电话|手机|邮箱|性别|出生|求职意向", explicit.group(1).strip())[0]
+        return value.strip(" ：:")
     for line in text.splitlines():
         candidate = line.strip()
         if re.fullmatch(r"[\u4e00-\u9fa5·]{2,8}", candidate):
             return candidate
     return "未知学生"
+
+
+def _extract_target_job(text: str) -> str:
+    match = re.search(r"意向岗位[:： ]*([^\n]+)", text)
+    if not match:
+        return ""
+    value = re.split(r"意向城市|期望薪资|求职类型|比赛经历|项目经历|教育背景|技能|证书|[，,；;]", match.group(1).strip())[0]
+    return value.strip(" ：:")
 
 
 def _extract_text_from_office_file(file_name: str, content_bytes: bytes) -> str:
@@ -114,9 +155,13 @@ class MockOCRProvider(BaseOCRProvider):
         "PostgreSQL",
         "Redis",
         "SQL",
+        "MySQL",
         "Java",
+        "Go",
         "C语言",
         "数据结构",
+        "数据分析",
+        "数据清洗",
         "大数据分析",
         "Docker",
         "Linux",
@@ -125,6 +170,8 @@ class MockOCRProvider(BaseOCRProvider):
         "深度学习",
         "PyTorch",
         "Excel",
+        "ECharts",
+        "Spring Boot",
         "数据可视化",
     ]
     CERTIFICATE_CANDIDATES = [
@@ -158,6 +205,7 @@ class MockOCRProvider(BaseOCRProvider):
                 document_type,
                 "未能从文件中提取可用文字。",
             )
+        text = _normalize_ocr_text(text)
         skills = _extract_keywords(text, self.SKILL_CANDIDATES)
         certificates = _extract_keywords(text, self.CERTIFICATE_CANDIDATES)
         projects = re.findall(r"(项目|Project)[:： ]*(.+)", text)
@@ -166,6 +214,7 @@ class MockOCRProvider(BaseOCRProvider):
             "document_type": document_type,
             "name": _extract_name(text),
             "major": _extract_major(text),
+            "target_job": _extract_target_job(text),
             "skills": skills,
             "certificates": certificates,
             "projects": [item[1].strip() for item in projects],

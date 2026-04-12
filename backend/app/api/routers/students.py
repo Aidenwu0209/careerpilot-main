@@ -30,6 +30,7 @@ from app.services.matching.scoring import (
     score_professional_literacy,
     score_professional_skills,
 )
+from app.integrations.ocr.providers import _normalize_for_match, _normalize_ocr_text
 
 router = APIRouter()
 
@@ -55,7 +56,9 @@ def _extract_resume_experience_context(db: Session, owner_id: int) -> dict:
     ).all())
     projects: list[str] = []
     internships: list[str] = []
+    target_jobs: list[str] = []
     raw_sections: list[str] = []
+    full_texts: list[str] = []
     section_markers = ("项目经历", "项目经验", "项目实践", "实习经历", "实习经验", "工作经历", "实践经历")
 
     for file in files:
@@ -65,19 +68,25 @@ def _extract_resume_experience_context(db: Session, owner_id: int) -> dict:
         structured = ocr.get("structured_json") or {}
         projects.extend(_safe_list(structured.get("projects")))
         internships.extend(_safe_list(structured.get("internships")))
+        if structured.get("target_job"):
+            target_jobs.append(str(structured.get("target_job")))
 
-        lines = [line.strip() for line in str(ocr.get("raw_text") or "").splitlines() if line.strip()]
+        raw_text = _normalize_ocr_text(str(ocr.get("raw_text") or ""))
+        if raw_text:
+            full_texts.append(raw_text[:5000])
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
         for idx, line in enumerate(lines):
             if any(marker in line for marker in section_markers):
-                raw_sections.extend(lines[idx: idx + 10])
+                raw_sections.extend(lines[idx: idx + 18])
 
-    project_text = "；".join(dict.fromkeys(projects + raw_sections))
+    project_text = "；".join(dict.fromkeys(projects + raw_sections + full_texts))
     internship_text = "；".join(dict.fromkeys(internships))
     combined = f"{project_text}；{internship_text}".strip("；")
     return {
         "text": combined,
         "projects": projects,
         "internships": internships,
+        "target_jobs": list(dict.fromkeys(target_jobs)),
         "project_count": len([item for item in projects if len(item) > 2]),
         "internship_count": len([item for item in internships if len(item) > 2]),
     }
@@ -120,6 +129,31 @@ def _score_experience_context(experience: dict, job_profile: JobProfile, posting
     return {"score": round(min(100.0, score), 1), "tags": tags, "reason": reason}
 
 
+def _score_target_intent(experience: dict, job_profile: JobProfile) -> dict:
+    target_text = _normalize_for_match(" ".join(_safe_list(experience.get("target_jobs"))))
+    if not target_text:
+        return {"score": 0.0, "tags": []}
+
+    title = _normalize_for_match(job_profile.title or "")
+    intent_rules = [
+        ("数据分析", ("数据分析", "商业分析", "数据产品")),
+        ("数据处理", ("数据分析", "数据工程", "数据产品", "后端")),
+        ("后端开发", ("后端", "全栈", "数据工程")),
+        ("算法", ("算法", "AI", "机器学习")),
+        ("人工智能", ("算法", "AI", "机器学习")),
+        ("前端开发", ("前端", "全栈")),
+        ("产品", ("产品", "数据产品")),
+    ]
+    matched: list[str] = []
+    for intent, title_keywords in intent_rules:
+        if intent in target_text and any(_normalize_for_match(keyword) in title for keyword in title_keywords):
+            matched.append(intent)
+
+    if not matched:
+        return {"score": 0.0, "tags": []}
+    return {"score": min(10.0, 5.0 + len(matched) * 3.0), "tags": matched[:4]}
+
+
 def _score_recommended_job(student_profile: StudentProfile, job_profile: JobProfile, experience: dict | None = None, posting: JobPosting | None = None) -> dict:
     student_data = {
         "skills": student_profile.skills_json or [],
@@ -152,8 +186,9 @@ def _score_recommended_job(student_profile: StudentProfile, job_profile: JobProf
         1,
     )
     experience_result = _score_experience_context(experience or {}, job_profile, posting)
+    intent_result = _score_target_intent(experience or {}, job_profile)
     adjusted_score = round(
-        min(100.0, total_score + experience_result["score"] * 0.28),
+        min(100.0, total_score + experience_result["score"] * 0.28 + intent_result["score"]),
         1,
     )
     return {
@@ -162,6 +197,8 @@ def _score_recommended_job(student_profile: StudentProfile, job_profile: JobProf
         "experience_score": experience_result["score"],
         "experience_tags": experience_result["tags"],
         "experience_reason": experience_result["reason"],
+        "intent_bonus": intent_result["score"],
+        "intent_tags": intent_result["tags"],
         "matched_skills": skill_evidence.get("matched_skills", []),
         "missing_skills": skill_evidence.get("missing_skills", []),
         "matched_certificates": basic_evidence.get("matched_certificates", []),
@@ -246,24 +283,38 @@ def get_recommended_jobs(
             scored_profiles.append((final_score, scoring, jp, posting))
 
         scored_profiles.sort(key=lambda item: item[0], reverse=True)
+        diversified_profiles = []
+        title_counts: dict[str, int] = {}
+        max_per_title = 6
+        for item in scored_profiles:
+            title = item[2].title
+            if title_counts.get(title, 0) >= max_per_title:
+                continue
+            diversified_profiles.append(item)
+            title_counts[title] = title_counts.get(title, 0) + 1
+            if len(diversified_profiles) >= max_recommended:
+                break
 
         logger.info(
-            "推荐岗位统计: 总岗位数=%s, 60分以上岗位数=%s, 项目数=%s, 实习数=%s, 将返回=%s",
+            "推荐岗位统计: 总岗位数=%s, 60分以上岗位数=%s, 多样化后=%s, 项目数=%s, 实习数=%s, 将返回=%s",
             len(all_profiles),
             len(scored_profiles),
+            len(diversified_profiles),
             experience["project_count"],
             experience["internship_count"],
-            min(len(scored_profiles), max_recommended),
+            min(len(diversified_profiles), max_recommended),
         )
 
-        for _, scoring, jp, posting in scored_profiles[:max_recommended]:
+        for _, scoring, jp, posting in diversified_profiles:
             company_name = posting.company_name if posting else "推荐岗位"
             salary_range = posting.salary_range if posting and posting.salary_range else ""
             skills = jp.skill_requirements[:5] if jp.skill_requirements else []
-            matched = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"]))[:6]
+            matched = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"] + scoring["intent_tags"]))[:6]
             missing = scoring["missing_skills"][:4]
 
-            if scoring["experience_reason"]:
+            if scoring["intent_tags"]:
+                reason = f"OCR 意向岗位命中 {', '.join(scoring['intent_tags'])}，并结合项目/技能证据推荐。"
+            elif scoring["experience_reason"]:
                 reason = scoring["experience_reason"]
             elif len(matched) >= 3:
                 reason = f"已掌握 {', '.join(matched[:3])} 等核心技能。"
