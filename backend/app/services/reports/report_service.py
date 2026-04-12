@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.integrations.llm.providers import BaseLLMProvider
 from app.models import CareerReport, GrowthTask, JobProfile, ReportVersion, Student, StudentProfile, UploadedFile
+from app.services.matching.recommendation import _resume_relevance
 from app.services.matching.matching_service import MatchingService
 from app.services.paths.career_path_service import CareerPathService
 from app.services.reports.exporters import export_markdown_to_docx, export_markdown_to_pdf
@@ -36,7 +37,7 @@ class ReportService:
         job_profile = db.scalar(select(JobProfile).where(JobProfile.job_code == job_code))
         if not student or not student_profile or not job_profile:
             raise ValueError("生成报告前请先准备学生画像与岗位画像")
-        latest_ocr = self._latest_resume_ocr(db, student.user_id)
+        latest_ocr = self._latest_resume_ocr(db, student.user_id, job_profile, student_profile.source_summary)
         student_name = self._student_name_from_ocr(student, latest_ocr)
         report = db.scalar(
             select(CareerReport)
@@ -51,6 +52,7 @@ class ReportService:
             and student_profile.updated_at
             and report.updated_at >= student_profile.updated_at
             and self._report_matches_current_resume(report, student_name, latest_ocr)
+            and "OCR 项目/意向加权" in report.markdown_content
         ):
             return {
                 "report_id": report.id,
@@ -129,14 +131,33 @@ class ReportService:
             "status": report.status,
         }
 
-    def _latest_resume_ocr(self, db: Session, owner_id: int) -> dict:
-        uploaded = db.scalar(
+    def _latest_resume_ocr(self, db: Session, owner_id: int, job_profile: JobProfile | None = None, source_summary: str = "") -> dict:
+        uploads = list(db.scalars(
             select(UploadedFile)
             .where(UploadedFile.owner_id == owner_id)
             .where(UploadedFile.file_type == "resume")
             .order_by(UploadedFile.created_at.desc(), UploadedFile.id.desc())
-        )
-        if not uploaded or not uploaded.meta_json:
+            .limit(8)
+        ).all())
+        if not uploads:
+            return {}
+        if source_summary:
+            source_names = {item.strip() for item in source_summary.split("；") if item.strip()}
+            sourced_uploads = [upload for upload in uploads if upload.file_name in source_names]
+            if sourced_uploads:
+                uploads = sourced_uploads
+        if job_profile:
+            ranked = []
+            for uploaded in uploads:
+                ocr = (uploaded.meta_json or {}).get("ocr_result") or (uploaded.meta_json or {}).get("ocr")
+                if isinstance(ocr, dict):
+                    ranked.append((_resume_relevance(ocr, job_profile), ocr))
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            if ranked and ranked[0][0] > 0:
+                return ranked[0][1]
+
+        uploaded = uploads[0]
+        if not uploaded.meta_json:
             return {}
         ocr = uploaded.meta_json.get("ocr_result") or uploaded.meta_json.get("ocr")
         return ocr if isinstance(ocr, dict) else {}

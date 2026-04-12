@@ -61,16 +61,19 @@ class StudentProfileService:
             "source_summary": "",
         }
         evidence_items: list[dict] = []
-        for uploaded_file_id in uploaded_file_ids:
+        uploaded_files = [db.get(UploadedFile, uploaded_file_id) for uploaded_file_id in uploaded_file_ids]
+        uploaded_files = [file for file in uploaded_files if file]
+        resume_files = [file for file in uploaded_files if file.file_type == "resume"]
+        if len(resume_files) > 1:
+            latest_resume = sorted(resume_files, key=lambda file: (file.created_at, file.id), reverse=True)[0]
+            uploaded_files = [file for file in uploaded_files if file.file_type != "resume"] + [latest_resume]
+
+        for uploaded in uploaded_files:
             try:
-                uploaded = db.get(UploadedFile, uploaded_file_id)
-                if not uploaded:
-                    logger.warning(f"Uploaded file {uploaded_file_id} not found, skipping")
-                    continue
                 ocr = uploaded.meta_json.get("ocr") if uploaded.meta_json else None
                 if _ocr_needs_refresh(ocr):
                     document_type = "resume" if uploaded.file_type == "resume" else uploaded.file_type
-                    ocr = await self.file_service.parse_uploaded_file(db, uploaded_file_id, document_type)
+                    ocr = await self.file_service.parse_uploaded_file(db, uploaded.id, document_type)
                 structured = ocr["structured_json"]
                 # 优先使用OCR解析的专业信息，覆盖学生基本信息中的专业
                 if structured.get("major"):

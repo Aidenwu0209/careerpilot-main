@@ -5,12 +5,10 @@ import logging
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.models import JobProfile, MatchDimensionScore, MatchResult, StudentProfile
-from app.services.matching.scoring import (
-    score_basic_requirements,
-    score_development_potential,
-    score_professional_literacy,
-    score_professional_skills,
+from app.models import JobPosting, JobProfile, MatchDimensionScore, MatchResult, Student, StudentProfile
+from app.services.matching.recommendation import (
+    extract_resume_experience_context,
+    score_recommended_job,
 )
 
 logger = logging.getLogger(__name__)
@@ -21,31 +19,27 @@ class MatchingService:
         try:
             student_profile = db.scalar(select(StudentProfile).where(StudentProfile.student_id == student_id))
             job_profile = db.scalar(select(JobProfile).where(JobProfile.job_code == job_code))
-            if not student_profile or not job_profile:
+            student = db.get(Student, student_id)
+            if not student_profile or not job_profile or not student:
                 raise ValueError("学生画像或岗位画像不存在")
-            student = {
-                "skills": student_profile.skills_json,
-                "certificates": student_profile.certificates_json,
-                "capability_scores": student_profile.capability_scores,
-                "completeness_score": student_profile.completeness_score,
-                "competitiveness_score": student_profile.competitiveness_score,
-            }
-            job = {
-                "title": job_profile.title,
-                "skill_requirements": job_profile.skill_requirements,
-                "certificate_requirements": job_profile.certificate_requirements,
-                "capability_scores": job_profile.capability_scores,
-            }
             weights = job_profile.dimension_weights or {
                 "basic_requirements": 0.2,
                 "professional_skills": 0.4,
                 "professional_literacy": 0.2,
                 "development_potential": 0.2,
             }
-            basic_score, basic_evidence = score_basic_requirements(student, job)
-            skill_score, skill_evidence = score_professional_skills(student, job)
-            literacy_score, literacy_evidence = score_professional_literacy(student, job)
-            potential_score, potential_evidence = score_development_potential(student, job)
+            posting = db.scalar(select(JobPosting).where(JobPosting.job_code == job_code).limit(1))
+            experience = extract_resume_experience_context(db, student.user_id, job_profile, student_profile.source_summary)
+            scoring = score_recommended_job(student_profile, job_profile, experience, posting)
+            scoring_dimensions = scoring["dimensions"]
+            basic_score = scoring_dimensions["basic_requirements"]["score"]
+            skill_score = scoring_dimensions["professional_skills"]["score"]
+            literacy_score = scoring_dimensions["professional_literacy"]["score"]
+            potential_score = scoring_dimensions["development_potential"]["score"]
+            basic_evidence = scoring_dimensions["basic_requirements"]["evidence"]
+            skill_evidence = scoring_dimensions["professional_skills"]["evidence"]
+            literacy_evidence = scoring_dimensions["professional_literacy"]["evidence"]
+            potential_evidence = scoring_dimensions["development_potential"]["evidence"]
             dimensions = [
                 {
                     "dimension": "基础要求",
@@ -75,14 +69,19 @@ class MatchingService:
                     "reasoning": "根据学习能力、创新能力和画像完整度评估长期成长性。",
                     "evidence": potential_evidence,
                 },
+                {
+                    "dimension": "OCR 项目/意向加权",
+                    "score": scoring["experience_score"],
+                    "weight": 0.28,
+                    "reasoning": "根据 OCR 原文中的项目经历、实习经历和意向岗位对岗位相关性进行补充加权。",
+                    "evidence": {
+                        "experience_tags": scoring["experience_tags"],
+                        "intent_tags": scoring["intent_tags"],
+                        "intent_bonus": scoring["intent_bonus"],
+                    },
+                },
             ]
-            total_score = round(
-                basic_score * weights["basic_requirements"]
-                + skill_score * weights["professional_skills"]
-                + literacy_score * weights["professional_literacy"]
-                + potential_score * weights["development_potential"],
-                2,
-            )
+            total_score = scoring["score"]
             gap_items = []
             for skill in skill_evidence["missing_skills"]:
                 gap_items.append({"type": "skill", "name": skill, "suggestion": f"优先通过课程/项目补齐 {skill}。"})
@@ -93,10 +92,13 @@ class MatchingService:
                 "将简历中的项目成果量化，增强竞争力表达。",
                 "按月复盘岗位技能覆盖率并更新行动计划。",
             ]
+            strengths = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"][:3]))
             summary = (
                 f"目标岗位为 {job_profile.title}。"
-                f"当前核心技能匹配度 {skill_score:.1f} 分，整体综合得分 {total_score:.1f} 分。"
-                f"优势主要体现在已具备的匹配技能与学习潜力，短板集中在 {', '.join(item['name'] for item in gap_items[:3]) or '证书与项目表达'}。"
+                f"当前核心技能匹配度 {skill_score:.1f} 分，基础画像分 {scoring['base_score']:.1f} 分，"
+                f"OCR 项目/意向加权后综合得分 {total_score:.1f} 分。"
+                f"优势主要体现在 {', '.join(strengths) or '项目经历与学习潜力'}，"
+                f"短板集中在 {', '.join(item['name'] for item in gap_items[:3]) or '证书与项目表达'}。"
             )
             match = db.scalar(
                 select(MatchResult)
@@ -140,4 +142,3 @@ class MatchingService:
         except Exception as e:
             logger.error(f"Unexpected error in analyze_match for student {student_id}, job {job_code}: {str(e)}")
             raise ValueError(f"Failed to analyze match: {str(e)}") from e
-
