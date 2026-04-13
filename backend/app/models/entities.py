@@ -232,6 +232,8 @@ class PathRecommendation(TimestampMixin, Base):
     target_job_code: Mapped[str] = mapped_column(String(80), index=True)
     primary_path_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     alternate_paths_json: Mapped[list[list[str]]] = mapped_column(JSON, default=list)
+    vertical_graph_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    transition_graph_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     gaps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     recommendations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 

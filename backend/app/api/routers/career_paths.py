@@ -50,13 +50,48 @@ def get_path_result(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    vertical_graph = path_result.vertical_graph_json or {}
+    transition_graph = path_result.transition_graph_json or {}
+
+    # Backward compatibility: build minimal graph from text paths for old records
+    if not vertical_graph and path_result.primary_path_json:
+        vertical_graph = {
+            "title": path_result.primary_path_json[0] if path_result.primary_path_json else "",
+            "description": "历史记录（仅保留文本路径，重新生成可查看完整图谱）。",
+            "nodes": [
+                {"title": t, "level": i + 1, "description": "", "skills": []}
+                for i, t in enumerate(path_result.primary_path_json)
+            ],
+            "edges": [],
+            "promotion_paths": [path_result.primary_path_json],
+            "vertical_paths": [],
+        }
+    if not transition_graph and path_result.alternate_paths_json:
+        transition_graph = {
+            "target": path_result.primary_path_json[0] if path_result.primary_path_json else "",
+            "nodes": [],
+            "edges": [],
+            "role_paths": [
+                {
+                    "title": path[0] if path else "",
+                    "description": "",
+                    "skills": [],
+                    "paths": [
+                        {"steps": path, "relation": "换岗", "description": "", "skill_bridge": []}
+                    ],
+                }
+                for path in (path_result.alternate_paths_json or [])[:5]
+            ],
+            "clusters": [],
+        }
+
     return APIResponse(data={
         "primary_path": path_result.primary_path_json or [],
         "alternate_paths": path_result.alternate_paths_json or [],
-        "vertical_graph": {},
-        "transition_graph": {},
+        "vertical_graph": vertical_graph,
+        "transition_graph": transition_graph,
         "gaps": path_result.gaps_json or [],
         "recommendations": path_result.recommendations_json or [],
-        "rationale": "历史记录仅保留基础路径；重新生成可查看完整岗位图谱。",
+        "rationale": "基于岗位图谱的晋升链路和转岗链路，结合学生当前技能覆盖情况生成主路径与备选路径。",
         "target_job_code": path_result.target_job_code,
     })

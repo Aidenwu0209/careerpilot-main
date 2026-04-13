@@ -135,6 +135,8 @@ class CareerPathService:
                 db.flush()
             existing.primary_path_json = primary_path
             existing.alternate_paths_json = alternate_paths
+            existing.vertical_graph_json = vertical_graph
+            existing.transition_graph_json = transition_graph
             existing.gaps_json = gaps
             existing.recommendations_json = recommendations
             db.commit()
