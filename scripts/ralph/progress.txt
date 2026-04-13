@@ -20,6 +20,10 @@
 - 测试中上传文件需要用 `python-docx` 生成有效 DOCX，不能用纯文本伪装 PDF
 - `Resume.file_id` 是 unique FK，天然支持多简历隔离，每份简历独立存储 `parsed_json`
 - OCR 解析结果双写：`UploadedFile.meta_json["ocr"]`（完整）和 `Resume.parsed_json`（仅 structured_json）
+- `AnalysisRun` 模型是分析上下文的枢纽，通过 FK 绑定 profile_version、match_result、path_recommendation、report
+- 分析路由 `PATCH /{run_id}/context` 用于逐步关联下游结果，`exclude_unset=True` 保证部分更新不清空其他字段
+- `ProfileVersion.snapshot_json` 存储完整画像快照，包含 `uploaded_file_ids` 和 `mode` 用于追溯来源
+- Router 层通过 `try/except ValueError` 捕获 service 层业务校验并返回 400 错误
 
 ## 2026-04-14 22:30 - US-001
 - 实现了多类型文件上传的校验与标准化元数据返回
@@ -73,4 +77,46 @@
   - `MockOCRProvider` 在本地文本提取失败后，仅对 `.pdf/.doc/.docx/.png/.jpg/.jpeg` 扩展名的文件抛出 `OCRParseError`，其他扩展名会 fallback 到 `content_bytes.decode("utf-8")`
   - OCR 解析结果同时存储在 `UploadedFile.meta_json["ocr"]` 和 `Resume.parsed_json`，其中 `parsed_json` 只存 `structured_json` 部分
   - 已有 4 个 pre-existing failures（3 个 auth 401 + 1 个匹配维度断言），与本次改动无关
+---
+
+## 2026-04-14 23:45 - US-004
+- 实现了分析任务 analysis_run 上下文骨架
+  - 模型：`AnalysisRun` 新增 7 个上下文绑定字段：`uploaded_file_ids`（JSON）、`resume_file_id`（FK）、`profile_version_id`（FK）、`target_job_code`（String）、`match_result_id`（FK）、`path_recommendation_id`（FK）、`report_id`（FK）
+  - 路由：`POST /start` 现在存储 `uploaded_file_ids`、`resume_file_id`（自动从 file_ids 中找 resume 类型文件）、`target_job_code`
+  - 路由：新增 `PATCH /{run_id}/context` 端点，逐步关联下游结果（profile_version、match_result、path_recommendation、report）
+  - 路由：所有响应模型新增上下文字段，`_run_to_state` 辅助函数统一转换
+  - 测试：新增 17 个测试用例覆盖字段存储（7个）、上下文更新（7个）、隔离性（3个）
+- 更改的文件：
+  - `backend/app/models/entities.py` — AnalysisRun 新增上下文绑定字段
+  - `backend/app/api/routers/analysis.py` — 重构路由以支持上下文存储和更新
+  - `backend/tests/unit/test_analysis_run_context.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `AnalysisRun` 是分析上下文的枢纽表，后续 US-005~US-014 的画像、匹配、路径、报告都应通过 `PATCH /{run_id}/context` 关联到具体 run
+  - Pydantic `model_dump(exclude_unset=True)` 是部分更新的关键，只更新传入的字段
+  - `dev-bypass` 认证映射到 user_id=1（student_demo），student_id=1，测试中可直接使用
+---
+
+## 2026-04-15 01:30 - US-005
+- 实现了画像生成显式消费 uploaded_file_ids
+  - Schema：`StudentProfileGenerateRequest` 中 `uploaded_file_ids` 从可选（default_factory=list）改为必填（Field(...)），新增 `mode` 字段支持 "current_resume" 和 "merged_materials" 两种模式
+  - Schema：`StudentProfileOut` 新增 `profile_version_id` 字段
+  - Service：`generate_profile` 新增 `mode` 参数，"current_resume" 模式仅使用最新简历文件，"merged_materials" 模式使用所有指定文件
+  - Service：新增输入校验，`uploaded_file_ids` 和 `manual_input` 不能同时为空
+  - Service：`ProfileVersion` 快照新增 `uploaded_file_ids` 和 `mode` 字段，返回 `profile_version_id`
+  - Router：捕获 `ValueError` 返回 400 错误，传递 `mode` 参数
+  - 前端：`generateStudentProfile` 函数签名新增 `mode` 参数
+  - 前端：`demoStudentProfile` 新增 `profile_version_id` 字段
+  - 测试：新增 12 个测试用例覆盖必填校验（3个）、current_resume 模式（3个）、merged_materials 模式（1个）、历史隔离（2个）、版本追踪（3个）
+- 更改的文件：
+  - `backend/app/schemas/profile.py` — 请求/响应模型变更
+  - `backend/app/services/profiles/student_profile_service.py` — 核心模式过滤和验证逻辑
+  - `backend/app/api/routers/student_profiles.py` — 路由层传递 mode 和错误处理
+  - `frontend/lib/api.ts` — 前端 API 函数签名
+  - `frontend/lib/demo-data.ts` — demo 数据新增字段
+  - `backend/tests/unit/test_profile_explicit_files.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `ProfileVersion.snapshot_json` 现在包含 `uploaded_file_ids` 和 `mode`，后续 story 可以用这些信息追溯来源文件
+  - `generate_profile` 返回 `profile_version_id`，后续 US-006/US-007 可以直接使用
+  - Router 层通过 `try/except ValueError` 转为 400，是处理 service 层业务校验的标准模式
+  - 测试上传文件必须使用 `python-docx` 生成有效 DOCX，不能用 fake PDF bytes
 ---
