@@ -138,7 +138,7 @@ class MockLLMProvider(BaseLLMProvider):
         if gap_lines:
             overview += f" 当前主要差距为 {'；'.join(gap_lines)}。"
 
-        # Build action_plan from real gap_items and suggestions
+        # Build action_plan from real gap_items and suggestions only — no generic fallbacks
         short_term: list[str] = []
         mid_term: list[str] = []
         for gap in gap_items:
@@ -151,16 +151,15 @@ class MockLLMProvider(BaseLLMProvider):
                 short_term.append(f"{rec['focus']}：{'、'.join(rec.get('items', []))}")
             elif rec.get("phase") == "中期":
                 mid_term.append(f"{rec['focus']}：{'、'.join(rec.get('items', []))}")
-        if not short_term:
-            short_term = ["围绕目标岗位补齐核心技能与项目经验。"]
-        if not mid_term:
-            mid_term = ["通过实习或竞赛积累实战经验，定期复盘能力成长。"]
 
-        metrics = [
-            "岗位关键技能覆盖率",
-            "项目/实习产出数量",
-            "面试通过率或模拟面试评分",
-        ]
+        # Derive metrics from gap_items instead of hardcoding
+        metrics: list[str] = []
+        if gap_items:
+            metrics.append("岗位关键技能覆盖率")
+        if path_recs:
+            metrics.append("路径里程碑达成率")
+        if not metrics:
+            metrics.append("综合能力提升进度")
 
         content = {
             "overview": overview,
@@ -171,7 +170,7 @@ class MockLLMProvider(BaseLLMProvider):
             },
             "goals": {
                 "target_job": job_title,
-                "industry_trend": "数字化岗位需求持续增长，企业更加重视复合能力与真实项目经验。",
+                "industry_trend": path_result.get("industry_trend", ""),
                 "primary_path": path_result.get("primary_path", []),
                 "alternate_paths": path_result.get("alternate_paths", []),
             },
@@ -196,6 +195,7 @@ class MockLLMProvider(BaseLLMProvider):
 
         primary_path = path_result.get("primary_path", [])
         alt_paths = path_result.get("alternate_paths", [])
+        industry_trend = path_result.get("industry_trend", "")
 
         markdown = (
             f"# CareerPilot 职业发展报告\n\n"
@@ -204,8 +204,9 @@ class MockLLMProvider(BaseLLMProvider):
             f"### 差距分析\n{gap_section}\n\n"
             f"## 二、职业目标与路径规划\n"
             f"- 目标岗位：{job_title}\n"
-            f"- 行业趋势：{content['goals']['industry_trend']}\n"
         )
+        if industry_trend:
+            markdown += f"- 行业趋势：{industry_trend}\n"
         if primary_path:
             markdown += f"- 主路径：{' → '.join(primary_path)}\n"
         if alt_paths:

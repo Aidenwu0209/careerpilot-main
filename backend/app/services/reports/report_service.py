@@ -31,6 +31,15 @@ class ReportService:
         self.career_path_service = career_path_service
         self.settings = get_settings()
 
+    def _check_evidence_sufficiency(self, latest_ocr: dict, match_result: dict) -> list[str]:
+        """Return list of missing evidence descriptions; empty means sufficient."""
+        missing: list[str] = []
+        if not latest_ocr or not latest_ocr.get("raw_text"):
+            missing.append("简历 OCR 解析结果为空，无法提取真实经历与技能证据")
+        if not match_result or not match_result.get("dimensions"):
+            missing.append("匹配结果维度数据为空，无法生成评分分析")
+        return missing
+
     async def generate_report(self, db: Session, student_id: int, job_code: str) -> dict:
         student = db.get(Student, student_id)
         student_profile = db.scalar(select(StudentProfile).where(StudentProfile.student_id == student_id))
@@ -65,6 +74,45 @@ class ReportService:
             }
         match_result = self.matching_service.analyze_match(db, student_id, job_code)
         path_result = await self.career_path_service.plan_path(db, student_id, job_code)
+
+        # Evidence sufficiency check — return insufficient_data before calling LLM
+        evidence_gaps = self._check_evidence_sufficiency(latest_ocr, match_result)
+        if evidence_gaps:
+            insufficient_content = {
+                "overview": "",
+                "matching_analysis": {},
+                "goals": {},
+                "action_plan": {},
+                "evidence": {"missing": evidence_gaps},
+            }
+            insufficient_md = (
+                "# CareerPilot 职业发展报告\n\n"
+                "> **资料不足，无法生成完整报告**\n\n"
+                "以下关键证据缺失，请补充后重试：\n"
+            )
+            for gap in evidence_gaps:
+                insufficient_md += f"- {gap}\n"
+            insufficient_md += (
+                "\n建议：请先上传简历并完成 OCR 解析，确保匹配分析数据可用。"
+            )
+            # Persist insufficient_data status so frontend can react
+            if not report:
+                report = CareerReport(student_id=student_id, target_job_code=job_code)
+                db.add(report)
+                db.flush()
+            report.content_json = insufficient_content
+            report.markdown_content = insufficient_md
+            report.status = "insufficient_data"
+            db.commit()
+            return {
+                "report_id": report.id,
+                "student_id": student_id,
+                "job_code": job_code,
+                "content": report.content_json,
+                "markdown_content": report.markdown_content,
+                "status": report.status,
+                "path_recommendation_id": report.path_recommendation_id,
+            }
 
         # Look up the PathRecommendation that plan_path just created/updated
         path_rec = db.scalar(
