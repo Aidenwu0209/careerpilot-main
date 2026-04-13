@@ -96,56 +96,95 @@ class MockLLMProvider(BaseLLMProvider):
         job_title = payload.get("job_title", "目标岗位")
         match_result = payload["match_result"]
         path_result = payload["path_result"]
+        student_profile = payload.get("student_profile", {})
+        job_profile = payload.get("job_profile", {})
+
+        # --- overview: derive from real match data only ---
+        total_score = match_result.get("total_score", 0)
+        overview = f"{student_name} 当前适合优先冲刺 {job_title}，综合匹配度为 {total_score:.1f} 分。"
+
+        # --- action_plan: derive gap-based short/mid terms from real data ---
+        gap_items = match_result.get("gap_items", [])
+        missing_skills = [g.get("item", "") for g in gap_items if g.get("type") == "skill"]
+        student_skills = student_profile.get("skills", []) if isinstance(student_profile, dict) else []
+        evidence = payload.get("resume_evidence", {})
+        has_projects = bool(evidence.get("projects")) if isinstance(evidence, dict) else False
+
+        short_term: list[str] = []
+        if missing_skills:
+            short_term.append(f"重点补齐岗位核心技能：{'、'.join(missing_skills[:5])}")
+        if not has_projects:
+            short_term.append("完善至少 1 个可展示的项目并沉淀成果描述")
+        else:
+            short_term.append("持续完善项目成果描述，提升可展示性")
+
+        mid_term: list[str] = []
+        certificates = student_profile.get("certificates", []) if isinstance(student_profile, dict) else []
+        if certificates:
+            mid_term.append(f"考取岗位相关证书，当前已持：{'、'.join(certificates[:3])}")
+        else:
+            mid_term.append("考取目标岗位相关的职业证书")
+
+        metrics = ["岗位关键技能覆盖率", "项目/实习产出数量"]
+
         content = {
-            "overview": f"{student_name} 当前适合优先冲刺 {job_title}，综合匹配度为 {match_result['total_score']:.1f} 分。",
+            "overview": overview,
             "matching_analysis": {
                 "fit_points": match_result["summary"],
                 "dimension_scores": match_result["dimensions"],
-                "gap_items": match_result["gap_items"],
+                "gap_items": gap_items,
             },
             "goals": {
                 "target_job": job_title,
-                "industry_trend": "数字化岗位需求持续增长，企业更加重视复合能力与真实项目经验。",
                 "primary_path": path_result.primary_path,
                 "alternate_paths": path_result.alternate_paths,
             },
             "action_plan": {
-                "short_term": [
-                    "2 周内补齐目标岗位核心技能中的薄弱项",
-                    "4 周内完善至少 1 个可展示项目并沉淀成果描述",
-                ],
-                "mid_term": [
-                    "8-12 周完成 1 次实习/竞赛/证书挑战",
-                    "每月完成一次阶段复盘并更新学生画像",
-                ],
-                "metrics": [
-                    "岗位关键技能覆盖率",
-                    "项目/实习产出数量",
-                    "面试通过率或模拟面试评分",
-                ],
+                "short_term": short_term or ["制定个人学习计划，逐步补齐岗位核心技能"],
+                "mid_term": mid_term or ["完成至少 1 次实习或竞赛经历"],
+                "metrics": metrics,
             },
             "evidence": {
-                "job_profile": payload["job_profile"],
-                "student_profile": payload["student_profile"],
+                "job_profile": job_profile,
+                "student_profile": student_profile,
                 "path_reasoning": path_result.rationale,
             },
         }
+
+        # --- markdown: structure-only template, all content from real data ---
+        dim_lines = []
+        for dim in match_result.get("dimensions", []):
+            dim_lines.append(f"  - **{dim.get('name', '')}**：{dim.get('score', 0):.1f} 分（权重 {dim.get('weight', 0):.0%}）")
+
+        gap_lines = []
+        for g in gap_items:
+            gap_lines.append(f"  - {g.get('item', '')}（{g.get('type', '')}）")
+
+        path_lines = " -> ".join(path_result.primary_path) if path_result.primary_path else "暂无"
+        alt_lines = "; ".join(" -> ".join(p) for p in path_result.alternate_paths) if path_result.alternate_paths else "暂无"
+
         markdown = (
             f"# CareerPilot 职业发展报告\n\n"
-            f"## 一、职业探索与岗位匹配\n{content['overview']}\n\n"
-            f"### 契合点与差距\n{match_result['summary']}\n\n"
-            f"## 二、职业目标与路径规划\n"
-            f"- 目标岗位：{job_title}\n"
-            f"- 行业趋势：{content['goals']['industry_trend']}\n"
-            f"- 主路径：{' -> '.join(path_result.primary_path)}\n"
-            f"- 备选路径：{'; '.join(' -> '.join(path) for path in path_result.alternate_paths)}\n\n"
-            f"## 三、行动计划与成果展示\n"
-            f"- 短期：{'；'.join(content['action_plan']['short_term'])}\n"
-            f"- 中期：{'；'.join(content['action_plan']['mid_term'])}\n"
-            f"- 评估周期与指标：每 2-4 周复盘一次；重点看 {'、'.join(content['action_plan']['metrics'])}\n\n"
-            f"## 四、编辑优化与导出\n"
+            f"## 一、职业探索与岗位匹配\n\n"
+            f"{overview}\n\n"
+            f"### 匹配度详情\n\n"
+            + ("\n".join(dim_lines) if dim_lines else "暂无维度评分数据") + "\n\n"
+            f"### 差距分析\n\n"
+            + ("\n".join(gap_lines) if gap_lines else "暂无差距数据") + "\n\n"
+            f"## 二、职业目标与路径规划\n\n"
+            f"- **目标岗位**：{job_title}\n"
+            f"- **主路径**：{path_lines}\n"
+            f"- **备选路径**：{alt_lines}\n\n"
+            f"## 三、行动计划与成果展示\n\n"
+            f"### 短期计划\n\n"
+            + "\n".join(f"- {item}" for item in content["action_plan"]["short_term"]) + "\n\n"
+            f"### 中期计划\n\n"
+            + "\n".join(f"- {item}" for item in content["action_plan"]["mid_term"]) + "\n\n"
+            f"### 评估指标\n\n"
+            + "\n".join(f"- {m}" for m in metrics) + "\n\n"
+            f"## 四、编辑优化与导出\n\n"
             f"本报告支持智能润色、内容完整性检查、手动编辑调整，并可导出为 PDF 或 DOCX。\n\n"
-            f"## 五、依据说明\n"
+            f"## 五、依据说明\n\n"
             f"- 学生画像与证据链已纳入分析\n"
             f"- 岗位画像、图谱路径、四维评分均可追溯\n"
         )
@@ -158,50 +197,8 @@ class MockLLMProvider(BaseLLMProvider):
         return polished + "\n\n> 本报告已完成智能润色与结构校验。"
 
     def _chat(self, system_prompt: str, user_prompt: str) -> str:
-        if any(kw in user_prompt for kw in ("技能", "职业", "岗位", "方向", "入行", "前景", "分析", "评估", "规划", "报告", "简历")):
-            return (
-                "# 职业规划分析报告\n\n"
-                "## 一、综合概述\n"
-                "根据你提供的信息，你是一位具备一定技术基础和项目经验的大学生，"
-                "当前处于职业方向探索与能力提升的关键阶段。建议优先关注互联网产品、数据分析等数字化岗位方向。\n\n"
-                "## 二、能力分析\n"
-                "- **专业技能**：具备基础技术能力，需进一步深化核心技能栈\n"
-                "- **学习能力**：有一定自学能力，建议加强系统性学习规划\n"
-                "- **沟通协作**：需提升跨部门沟通与团队协作经验\n"
-                "- **创新能力**：建议多参与创新型项目或竞赛，积累实战经验\n"
-                "- **实习实践**：当前实践经验有限，需尽快补充实习经历\n\n"
-                "## 三、优势与不足\n"
-                "### 优势\n"
-                "- 有项目经验和技术基础\n"
-                "- 对职业发展有清晰意识\n"
-                "- 数字化岗位需求旺盛，方向选择正确\n\n"
-                "### 待提升\n"
-                "- 核心技能深度不够\n"
-                "- 缺乏行业实习经验\n"
-                "- 职业证书和资质有待补充\n\n"
-                "## 四、职业方向建议\n"
-                "| 方向 | 推荐理由 | 适合度 |\n"
-                "|------|----------|--------|\n"
-                "| 产品经理 | 综合能力要求高，发展空间大 | ★★★★☆ |\n"
-                "| 数据分析师 | 技术与业务结合，需求旺盛 | ★★★★★ |\n"
-                "| 项目经理 | 侧重协调管理，成长路径清晰 | ★★★☆☆ |\n\n"
-                "## 五、行动建议\n"
-                "### 短期（1-3个月）\n"
-                "1. 梳理已有项目经验，提炼可量化的成果描述\n"
-                "2. 补齐目标岗位核心技能中的薄弱项\n"
-                "3. 完善个人简历，突出项目亮点\n\n"
-                "### 中期（3-6个月）\n"
-                "1. 寻找至少 1 次相关岗位实习机会\n"
-                "2. 考取 1-2 个行业认可的职业证书\n"
-                "3. 参加行业活动，拓展职业人脉\n\n"
-                "### 长期（6-12个月）\n"
-                "1. 完成实习并沉淀可展示的项目成果\n"
-                "2. 定期复盘能力提升进度，更新个人画像\n"
-                "3. 模拟面试，提升求职竞争力\n\n"
-                "## 六、总结\n"
-                "你的职业发展基础扎实，当前最重要的是**补充实习经验**和**深化核心技能**。"
-                "建议聚焦 1-2 个目标岗位方向，制定清晰的阶段性计划，稳步提升竞争力。"
-            )
+        # Mock chat returns a minimal structural response without injecting
+        # fixed conclusions. Real analysis should come from LLM or user data.
         return (
             "你好！我是职航智策 AI 助手，专门帮助大学生进行职业规划。\n\n"
             "你可以问我：\n"
@@ -385,11 +382,23 @@ class ErnieLLMProvider(BaseLLMProvider):
             "请只返回 JSON，不要输出 Markdown 代码块。"
             "JSON 顶层字段必须包含 content 和 markdown_content。"
             "content 必须包含 overview,matching_analysis,goals,action_plan,evidence。"
-            "markdown_content 需为中文职业发展报告，可直接导出，并必须覆盖以下四个章节："
-            "一、职业探索与岗位匹配：基于岗位画像和就业能力画像，量化呈现专业技能、通用素质等维度的契合度与差距；"
-            "二、职业目标设定与职业路径规划：结合职业探索结果和个人意愿设定职业目标，分析社会需求、行业发展趋势、企业岗位数据关联性和个人擅长方向，给出清晰发展路径；"
-            "三、行动计划与成果展示：制定短期和中期个性化成长计划，包含学习路径、实习/项目实践安排、评估周期和指标；"
-            "四、编辑优化与导出：说明报告支持智能润色、完整性检查、手动编辑和导出。"
+            "\n\n"
+            "## 结构骨架要求（仅定义章节和字段占位）\n"
+            "markdown_content 需为中文职业发展报告，必须包含以下四个章节标题：\n"
+            "- 一、职业探索与岗位匹配\n"
+            "- 二、职业目标设定与职业路径规划\n"
+            "- 三、行动计划与成果展示\n"
+            "- 四、编辑优化与导出\n\n"
+            "## 正文生成要求（真实数据优先）\n"
+            "**禁止**在模板中注入固定结论文案、通用建议或虚构内容。"
+            "所有正文必须基于 payload 中的真实数据生成：\n"
+            "- overview：引用 match_result.total_score 和 job_title\n"
+            "- matching_analysis：引用 match_result.dimensions 和 gap_items 中的具体数据\n"
+            "- goals：引用 path_result.primary_path 和 alternate_paths\n"
+            "- action_plan：根据 gap_items 中的具体缺失项生成针对性建议，不使用通用占位\n"
+            "- evidence：引用 job_profile 和 student_profile 的真实数据\n"
+            "如果 payload 中缺少某项数据，在对应章节中明确标注'数据不足'，而不是编造内容。"
+            "\n"
             "注意：如果 payload 中包含 student_major_source 字段为 'OCR解析'，说明专业信息是从简历OCR解析得到的，"
             "这是最准确的信息来源，请直接使用 student_major 字段作为专业信息，"
             "不要提示与'学生基本信息'存在差异或建议核实。"
