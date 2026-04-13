@@ -12,6 +12,7 @@
 - Cross-entity references (e.g. CareerReport -> PathRecommendation) use nullable FK columns to avoid breaking old records; always check null before fetching linked data.
 - Report page should fetch graph data via getPathResult(path_recommendation_id) instead of duplicating graph structures in report content_json.
 - Vertical graph timeline rendering: use `node.stage === "当前目标" || index === 0` to detect the target node for highlighting.
+- Path page must never fall back to plain-text list rendering (primaryPath/alternatePaths); always use graph views or show empty state.
 ---
 
 ## 2026-04-13 16:10 - US-001
@@ -61,4 +62,29 @@
   - 技能桥接点使用橙色底色（#fff4e5）+ 深橙色文字（#8a4b00）的标签，与技能标签的蓝色系区分
   - demo data 的 role_paths 从 2 个扩充到 5 个角色，每个角色至少 2 条路径，满足验收标准
   - TypeScript 严格模式下 `role.skills` 可能为 undefined，需用 `role.skills?.length ?? 0` 而非 `(role.skills ?? []).length` 来避免 TS18048
+---
+
+## 2026-04-13 17:20 - US-005
+- 移除了路径页的普通列表退化展示，路径页现在始终以图谱为主展示形态
+- 更改的文件：frontend/app/student/path/page.tsx
+- **未来迭代的学习：**
+  - 移除了 `displayedVerticalNodes` 对 `primaryPath` 的回退映射，vertical graph 现在只使用 `vertical_graph.nodes` 数据
+  - 移除了换岗图谱区域对 `alternatePaths` 的 `<ul>` 回退展示，不再出现纯文本退化
+  - 图谱数据为空时显示友好的空状态提示（"暂无垂直岗位图谱数据"/"暂无换岗路径数据"）
+  - 历史路径页通过导航到 `/student/path?history=path-XXX` 复用路径页，已由 US-001 保证图谱快照持久化
+  - 移除退化展示时同时移除了不再使用的 `primaryPath` 和 `alternatePaths` 变量声明
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
+
+## 2026-04-13 18:00 - US-006
+- 修复了报告正文对匹配证据字段的消费映射，让差距分析和行动建议使用真实匹配结果而非泛化文案
+- 更改的文件：backend/app/integrations/llm/providers.py
+- **未来迭代的学习：**
+  - MockLLMProvider.generate_report 之前使用硬编码的 action_plan（"2周内补齐..."），现在从 match_result.gap_items.suggestion、match_result.suggestions 和 path_result.recommendations 逐项构造
+  - overview 现在包含真实的学生专业、意向岗位、已匹配技能和差距信息
+  - ErnieLLMProvider.generate_report 的 system_prompt 增加了明确的逐字段消费指令，要求 LLM 使用 match_result.gap_items、dimensions、suggestions 等真实字段
+  - 报告 markdown 输出现在包含独立的"评分维度"和"差距分析"小节，直接展示各维度分数和真实差距项
+  - evidence 部分新增 resume_evidence 字段，保留原始简历证据供追溯
+  - test_matching.py 中 test_four_dimension_matching 断言 dimensions 数量为 4，但实际已有 5 个维度（含 OCR 项目/意向加权），属于既有问题
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
 ---
