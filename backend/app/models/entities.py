@@ -362,6 +362,15 @@ class AnalysisRun(TimestampMixin, Base):
     step_results: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     # step_results stores completion info: {"uploaded": true, "parsed": true, ...}
 
+    # Context binding fields — each analysis run explicitly tracks its input and output resources
+    uploaded_file_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    resume_file_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_files.id"), nullable=True)
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    target_job_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    match_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("match_results.id"), nullable=True)
+    path_recommendation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("path_recommendations.id"), nullable=True)
+    report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("career_reports.id"), nullable=True)
+
 
 class HistoryTitle(TimestampMixin, Base):
     __tablename__ = "history_titles"
