@@ -13,6 +13,8 @@
 - 当 service 层函数返回类型从 `dict` 改为 Pydantic model 后，所有使用该返回值的下游代码（如 MockLLMProvider）必须同步更新为属性访问而非字典下标访问
 - 匹配评分固定四维：基础要求(0.2)、职业技能(0.4)、职业素养(0.2)、发展潜力(0.2)；OCR 证据作为 evidence 增强折叠到四维中，不作为独立维度展示
 - `score_recommended_job()` 返回的 `evidence_boost` 表示 OCR 项目/意向证据加分，总分 = 四维加权平均（含 evidence_boost）
+- 报告生成前需通过证据校验门禁（`_check_evidence_sufficiency`），资料不足时返回 `status="insufficient_data"` + `missing_evidence` 列表，前端据此展示明确提示
+- `ReportResponse` 中 `content` 和 `markdown_content` 需允许空值（`dict`/`str` 默认值），否则 `insufficient_data` 状态无法通过 Pydantic 校验
 
 ---
 ## 2026-04-13 11:25 - US-001
@@ -91,4 +93,28 @@
   - `score_recommended_job()` 已返回 `matched_certificates`/`missing_certificates`，但之前推荐列表未暴露这些字段
   - 后端 reason 生成应避免无证据时的通用占位（如"学习能力和综合素质较好"），改为始终引用具体字段
   - `integration/test_demo_flow.py` 存在预先的鉴权失败（401），与本次变更无关
+---
+## 2026-04-13 20:45 - US-007
+- 在报告生成前增加了证据校验门禁 `_check_evidence_sufficiency()`，检查 OCR 解析结果、学生画像技能、能力评分三项
+- 资料不足时返回 `status="insufficient_data"` + `missing_evidence` 列表，不再继续调用 LLM 生成伪完整报告
+- 后端 `ReportResponse` schema 新增可选字段 `missing_evidence`，`content` 和 `markdown_content` 改为有默认空值
+- 前端 `ReportDraft` 类型同步新增 `missing_evidence` 字段，报告页处理 `insufficient_data` 状态时显示明确提示
+- 新增单元测试 `test_report_insufficient_data_without_ocr` 验证门禁拦截，更新 `test_report_completeness_logic` 补充 OCR 上传记录
+- 更改的文件：`backend/app/services/reports/report_service.py`, `backend/app/schemas/report.py`, `backend/tests/unit/test_report_completeness.py`, `frontend/lib/api.ts`, `frontend/app/student/report/page.tsx`
+- **未来迭代的学习：**
+  - `ReportResponse.content` 类型从 `ReportContent` 改为 `ReportContent | dict`，`markdown_content` 默认 `""`，以兼容 insufficient_data 状态
+  - `_latest_resume_ocr()` 查询 `UploadedFile` 记录的 `meta_json.ocr_result` 或 `meta_json.ocr`，测试中只需创建带 `meta_json` 的记录即可模拟 OCR 数据
+  - `student_profile_service.py:102` 有预存 bug：`uploaded_file_id` 变量未定义（应为 `uploaded.id`），但被 try/except 吞掉了
+---
+## 2026-04-13 21:10 - US-008
+- 限制模板只负责结构骨架，移除所有固定结论文案注入
+- `MockLLMProvider.generate_report()` 重写：overview 从真实匹配分数生成，action_plan 从 gap_items 和 student_profile 动态推导，移除硬编码的"数字化岗位需求持续增长"等通用文案
+- `MockLLMProvider._chat()` 移除硬编码的六段式职业规划分析报告模板（含固定评分、固定方向推荐表等），改为仅返回简单引导回复
+- `ErnieLLMProvider.generate_report()` system_prompt 重构：将指令分为"结构骨架要求"和"正文生成要求"两部分，明确禁止注入固定结论文案，要求正文必须基于 payload 真实数据
+- `chat.py` BASE_SYSTEM_PROMPT 重构：移除固定的六段式章节结构（综合概述→能力分析→优势与不足→职业方向建议→行动建议→总结），改为动态章节标题+真实数据优先规则
+- 更改的文件：`backend/app/integrations/llm/providers.py`, `backend/app/api/routers/chat.py`
+- **未来迭代的学习：**
+  - `MockLLMProvider._chat()` 中原先根据关键词匹配返回完整报告模板，这导致即使没有真实数据也会输出看似完整的分析，现已移除
+  - `goals` 中移除了 `industry_trend` 字段（之前硬编码为"数字化岗位需求持续增长"），如果下游代码依赖此字段需注意
+  - ErnieLLMProvider 的 system_prompt 现在分为结构骨架和正文生成两个明确区块，未来新增指令时应保持这种分离
 ---
