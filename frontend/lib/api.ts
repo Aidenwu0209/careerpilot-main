@@ -19,6 +19,7 @@ export type ReportDraft = {
   markdown_content: string;
   content: Record<string, unknown>;
   status: string;
+  path_recommendation_id: number | null;
 };
 
 export type StudentSession = {
@@ -202,7 +203,8 @@ export async function generateReport(studentId: number, jobCode: string): Promis
         job_code: jobCode,
         markdown_content: demoReportMarkdown,
         content: {},
-        status: "draft"
+        status: "draft",
+        path_recommendation_id: null,
       };
     }
     throw error;

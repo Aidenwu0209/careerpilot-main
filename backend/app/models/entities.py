@@ -268,6 +268,7 @@ class CareerReport(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
     target_job_code: Mapped[str] = mapped_column(String(80), index=True)
+    path_recommendation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("path_recommendations.id"), nullable=True)
     content_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     markdown_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(40), default="draft")

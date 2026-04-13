@@ -41,6 +41,7 @@ def get_report(
         content=report.content_json,
         markdown_content=report.markdown_content,
         status=report.status,
+        path_recommendation_id=report.path_recommendation_id,
     )
 
 

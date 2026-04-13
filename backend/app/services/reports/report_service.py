@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.integrations.llm.providers import BaseLLMProvider
-from app.models import CareerReport, GrowthTask, JobProfile, ReportVersion, Student, StudentProfile, UploadedFile
+from app.models import CareerReport, GrowthTask, JobProfile, PathRecommendation, ReportVersion, Student, StudentProfile, UploadedFile
 from app.services.matching.recommendation import _resume_relevance
 from app.services.matching.matching_service import MatchingService
 from app.services.paths.career_path_service import CareerPathService
@@ -61,9 +61,17 @@ class ReportService:
                 "content": report.content_json,
                 "markdown_content": report.markdown_content,
                 "status": report.status,
+                "path_recommendation_id": report.path_recommendation_id,
             }
         match_result = self.matching_service.analyze_match(db, student_id, job_code)
         path_result = await self.career_path_service.plan_path(db, student_id, job_code)
+
+        # Look up the PathRecommendation that plan_path just created/updated
+        path_rec = db.scalar(
+            select(PathRecommendation)
+            .where(PathRecommendation.student_id == student_id)
+            .where(PathRecommendation.target_job_code == job_code)
+        )
 
         # 从evidence中提取专业信息来源
         major_source = "学生基本信息"
@@ -107,6 +115,8 @@ class ReportService:
             report = CareerReport(student_id=student_id, target_job_code=job_code)
             db.add(report)
             db.flush()
+        if path_rec:
+            report.path_recommendation_id = path_rec.id
         report.content_json = llm_result["content"]
         report.markdown_content = llm_result["markdown_content"]
         report.status = "generated"
@@ -129,6 +139,7 @@ class ReportService:
             "content": report.content_json,
             "markdown_content": report.markdown_content,
             "status": report.status,
+            "path_recommendation_id": report.path_recommendation_id,
         }
 
     def _latest_resume_ocr(self, db: Session, owner_id: int, job_profile: JobProfile | None = None, source_summary: str = "") -> dict:

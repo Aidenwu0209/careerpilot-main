@@ -25,6 +25,7 @@ class ReportResponse(BaseModel):
     content: ReportContent
     markdown_content: str
     status: str
+    path_recommendation_id: int | None = None
 
 
 class ReportPolishRequest(BaseModel):
