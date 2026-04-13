@@ -436,6 +436,7 @@ export default function StudentMainPage() {
   };
 
   const handleDeleteFile = async (fileId: number) => {
+    if (!window.confirm("确定要删除此文件吗？删除后不可恢复。")) return;
     setDeletingId(fileId);
     try {
       await deleteFile(fileId);
