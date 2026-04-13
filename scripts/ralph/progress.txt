@@ -4,7 +4,7 @@
 - Source PRD: tasks/prd-careerpilot-platform-optimization.md
 - Created: 2026-04-14
 - Total Stories: 38
-- Completed Stories: 0
+- Completed Stories: 3
 
 ## Codebase Patterns
 - 后端使用 FastAPI + SQLAlchemy 2.0（Mapped/mapped_column 声明式）+ SQLite/PostgreSQL
@@ -17,6 +17,9 @@
 - 数据库无迁移系统，启动时 `Base.metadata.create_all()` 自动建表
 - Provider 模式：LLM/OCR/Storage/Graph/RAG 均有 mock 和 real 实现，通过 `.env` 切换
 - 无 Alembic 迁移，表结构变更需手动处理或重建数据库
+- 测试中上传文件需要用 `python-docx` 生成有效 DOCX，不能用纯文本伪装 PDF
+- `Resume.file_id` 是 unique FK，天然支持多简历隔离，每份简历独立存储 `parsed_json`
+- OCR 解析结果双写：`UploadedFile.meta_json["ocr"]`（完整）和 `Resume.parsed_json`（仅 structured_json）
 
 ## 2026-04-14 22:30 - US-001
 - 实现了多类型文件上传的校验与标准化元数据返回
@@ -34,4 +37,40 @@
   - 文件上传路由在 `backend/app/api/routers/files.py`，服务层在 `backend/app/services/ingestion/file_ingestion.py`
   - `UploadedFile` 模型已有 `file_type`、`created_at`、`url` 字段，只是路由层之前没有返回
   - 前端 `node_modules` 未安装，前端构建检查需要先 `npm install`
+---
+
+## 2026-04-14 23:15 - US-002
+- 实现了学生端文件列表展示与删除前确认提示
+  - 前端：在 `handleDeleteFile` 中增加 `window.confirm()` 确认提示，删除前弹出"确定要删除此文件吗？删除后不可恢复。"
+  - 后端：文件列表和删除 API 已存在（US-001 实现），无需额外后端改动
+  - 测试：新增 8 个测试用例覆盖文件列表（空列表、字段完整性、多类型文件、排序）和文件删除（成功删除、404、列表同步）
+- 更改的文件：
+  - `frontend/app/student/page.tsx` — handleDeleteFile 增加 window.confirm 确认
+  - `backend/tests/unit/test_file_list_delete.py` — 新增测试文件
+- **未来迭代的学习：**
+  - 学生主页面 `frontend/app/student/page.tsx` 是最复杂的组件（~770 行），包含聊天、文件管理和分析流水线
+  - 文件列表 UI 已内嵌在学生主页面中，没有独立文件管理页面
+  - 后端 `delete_file` 服务方法会同时删除关联的 Resume/Transcript/Certificate 记录
+  - 前端删除后通过 `setUploadedFiles((prev) => prev.filter(...))` 本地更新状态，无需重新请求
+  - 需要手动浏览器验证：删除确认弹窗的 UI 交互
+---
+
+## 2026-04-15 00:15 - US-003
+- 实现了每份简历独立解析结果持久化与查询
+  - OCR Provider：新增 `_extract_school`、`_extract_grade`、`_extract_graduation_year`、`_extract_competitions`、`_extract_self_evaluation` 五个提取函数
+  - OCR Provider：`structured_json` 新增 `school`、`grade`、`graduation_year`、`competitions`、`self_evaluation` 字段
+  - OCR Router：新增 `GET /api/ocr/result/{file_id}` 查询单个文件解析结果
+  - OCR Router：新增 `GET /api/ocr/results` 查询当前用户所有简历解析结果
+  - 解析结果通过 `Resume.file_id`（unique FK）绑定到具体文件，同账号多份简历互不覆盖
+  - 测试：新增 20 个测试用例覆盖字段完整性（13个）、文件绑定（2个）和多简历独立性（5个）
+- 更改的文件：
+  - `backend/app/integrations/ocr/providers.py` — 新增提取函数和字段
+  - `backend/app/api/routers/ocr.py` — 新增 GET 查询端点
+  - `backend/tests/unit/test_resume_parse_persistence.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `Resume` 模型通过 `file_id`（unique FK to `uploaded_files.id`）实现与文件 1:1 绑定，天然支持多简历隔离
+  - 测试上传文件需要用 `python-docx` 生成有效 DOCX 文件，不能用纯 UTF-8 文本伪装 PDF（pypdf 会报错）
+  - `MockOCRProvider` 在本地文本提取失败后，仅对 `.pdf/.doc/.docx/.png/.jpg/.jpeg` 扩展名的文件抛出 `OCRParseError`，其他扩展名会 fallback 到 `content_bytes.decode("utf-8")`
+  - OCR 解析结果同时存储在 `UploadedFile.meta_json["ocr"]` 和 `Resume.parsed_json`，其中 `parsed_json` 只存 `structured_json` 部分
+  - 已有 4 个 pre-existing failures（3 个 auth 401 + 1 个匹配维度断言），与本次改动无关
 ---
