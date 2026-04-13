@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SectionCard } from "@/components/SectionCard";
-import { generateReport, getRecommendedJobs, getStudentHistory, getStudentSession, type HistoryItem } from "@/lib/api";
+import { generateReport, getStudentHistory, getStudentSession, resolveTargetJob, type HistoryItem } from "@/lib/api";
 
 export default function StudentReportEntryPage() {
   const router = useRouter();
@@ -20,9 +20,8 @@ export default function StudentReportEntryPage() {
       setLoading(true);
       setError("");
       try {
-        const [session, jobs, history] = await Promise.all([
-          getStudentSession(),
-          getRecommendedJobs(),
+        const [targetJob, history] = await Promise.all([
+          resolveTargetJob(),
           getStudentHistory(),
         ]);
         if (cancelled) return;
@@ -30,19 +29,19 @@ export default function StudentReportEntryPage() {
         const reportItems = history.filter((item) => item.type === "report");
         setReports(reportItems);
 
+        if (!targetJob) {
+          setError("暂时没有确定的目标岗位，请先完成 OCR 简历解析和岗位推荐。");
+          return;
+        }
+
+        const session = await getStudentSession();
         if (!session.student_id) {
           setError("当前账号还没有学生档案，请先回到问答页上传简历并生成能力画像。");
           return;
         }
 
-        const targetJob = jobs.find((job) => job.job_code);
-        if (!targetJob) {
-          setError("暂时没有基于最新简历算出的推荐岗位，请先完成 OCR 简历解析和岗位推荐。");
-          return;
-        }
-
-        setMessage(`正在基于最新 OCR 简历生成完整报告：${targetJob.title}`);
-        const report = await generateReport(session.student_id, targetJob.job_code);
+        setMessage(`正在基于最新 OCR 简历生成完整报告：${targetJob.jobTitle}`);
+        const report = await generateReport(session.student_id, targetJob.jobCode);
         if (!cancelled) {
           router.replace(`/results/${report.report_id}`);
         }

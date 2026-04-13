@@ -27,6 +27,8 @@ export type StudentSession = {
   major: string;
   grade: string;
   career_goal: string;
+  confirmed_job_code: string | null;
+  confirmed_job_title: string | null;
   suggested_job_code: string | null;
   suggested_job_title: string | null;
 };
@@ -95,6 +97,41 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getStudentSession(): Promise<StudentSession> {
   return request<StudentSession>("/students/me");
+}
+
+export type TargetJob = {
+  jobCode: string;
+  jobTitle: string;
+};
+
+/**
+ * Unified target job resolution.
+ * Priority: user manually confirmed > session suggested (backend unified) > first recommended job.
+ * Returns null when no target job can be determined.
+ */
+export async function resolveTargetJob(): Promise<TargetJob | null> {
+  const session = await getStudentSession();
+  if (session.suggested_job_code && session.suggested_job_title) {
+    return { jobCode: session.suggested_job_code, jobTitle: session.suggested_job_title };
+  }
+  // Fallback: first recommended job with a valid job_code
+  try {
+    const jobs = await getRecommendedJobs();
+    const first = jobs.find((j) => j.job_code);
+    if (first) {
+      return { jobCode: first.job_code, jobTitle: first.title };
+    }
+  } catch {
+    // If recommended jobs fail, return null
+  }
+  return null;
+}
+
+export async function setTargetJob(jobCode: string, jobTitle: string): Promise<{ ok: boolean; confirmed_job_code: string; confirmed_job_title: string }> {
+  return request("/students/me/target-job", {
+    method: "PATCH",
+    body: JSON.stringify({ job_code: jobCode, job_title: jobTitle }),
+  });
 }
 
 export async function getStudentProfile(studentId: number): Promise<StudentProfile> {
@@ -560,4 +597,114 @@ export type JobListItem = {
 export async function getJobsList(skip: number = 0, limit: number = 100): Promise<{ total: number; items: JobListItem[] }> {
   const res = await request<{ data: { total: number; items: JobListItem[]; pagination: { total: number } } }>(`/jobs?skip=${skip}&limit=${limit}`);
   return { total: res.data.pagination?.total ?? res.data.total ?? 0, items: res.data.items };
+}
+
+export type ApiKeyStatus = {
+  configured: boolean;
+  auth_mode: "qianfan" | "aistudio";
+  api_key_masked: string | null;
+  secret_key_masked: string | null;
+  model_name: string | null;
+};
+
+type SaveApiKeyPayload = {
+  api_key: string;
+  secret_key?: string;
+  auth_mode: "qianfan" | "aistudio";
+};
+
+type ApiKeyTestResult = {
+  success: boolean;
+  message: string;
+};
+
+const API_KEY_STATUS_STORAGE_KEY = "careerpilot_api_key_status";
+
+const DEFAULT_API_KEY_STATUS: ApiKeyStatus = {
+  configured: false,
+  auth_mode: "qianfan",
+  api_key_masked: null,
+  secret_key_masked: null,
+  model_name: null,
+};
+
+function maskCredential(value: string): string {
+  if (!value) return "";
+  if (value.length <= 8) {
+    return `${value.slice(0, 2)}***${value.slice(-1)}`;
+  }
+  return `${value.slice(0, 4)}***${value.slice(-4)}`;
+}
+
+function readStoredApiKeyStatus(): ApiKeyStatus {
+  if (typeof window === "undefined") {
+    return DEFAULT_API_KEY_STATUS;
+  }
+
+  try {
+    const raw = localStorage.getItem(API_KEY_STATUS_STORAGE_KEY);
+    if (!raw) return DEFAULT_API_KEY_STATUS;
+    const parsed = JSON.parse(raw) as Partial<ApiKeyStatus>;
+    return {
+      configured: Boolean(parsed.configured),
+      auth_mode: parsed.auth_mode === "aistudio" ? "aistudio" : "qianfan",
+      api_key_masked: parsed.api_key_masked ?? null,
+      secret_key_masked: parsed.secret_key_masked ?? null,
+      model_name: parsed.model_name ?? null,
+    };
+  } catch {
+    return DEFAULT_API_KEY_STATUS;
+  }
+}
+
+function writeStoredApiKeyStatus(status: ApiKeyStatus): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(API_KEY_STATUS_STORAGE_KEY, JSON.stringify(status));
+}
+
+export async function generateDemoReport(): Promise<ReportDraft> {
+  return {
+    report_id: 0,
+    student_id: 1,
+    job_code: "DEMO",
+    markdown_content: demoReportMarkdown,
+    content: {},
+    status: "draft",
+  };
+}
+
+export async function getApiKeyStatus(): Promise<ApiKeyStatus> {
+  return readStoredApiKeyStatus();
+}
+
+export async function saveApiKey(payload: SaveApiKeyPayload): Promise<ApiKeyStatus> {
+  const status: ApiKeyStatus = {
+    configured: true,
+    auth_mode: payload.auth_mode,
+    api_key_masked: maskCredential(payload.api_key),
+    secret_key_masked: payload.secret_key ? maskCredential(payload.secret_key) : null,
+    model_name: payload.auth_mode === "qianfan" ? "ERNIE via Qianfan" : "ERNIE via AI Studio",
+  };
+  writeStoredApiKeyStatus(status);
+  return status;
+}
+
+export async function deleteApiKey(): Promise<ApiKeyStatus> {
+  writeStoredApiKeyStatus(DEFAULT_API_KEY_STATUS);
+  return DEFAULT_API_KEY_STATUS;
+}
+
+export async function testApiKey(): Promise<ApiKeyTestResult> {
+  const status = readStoredApiKeyStatus();
+  if (!status.configured) {
+    return {
+      success: false,
+      message: "当前还没有保存 API Key。",
+    };
+  }
+
+  return {
+    success: true,
+    message: "密钥格式已保存。本地演示环境当前仍默认使用内置 mock 模式。",
+  };
 }

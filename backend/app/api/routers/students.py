@@ -31,6 +31,48 @@ from app.services.matching.recommendation import (
 router = APIRouter()
 
 
+def _resolve_target_job(student: Student, db: Session) -> tuple[Optional[str], Optional[str]]:
+    """Unified target job resolution with priority order:
+    1. User manually confirmed job (confirmed_job_code)
+    2. Most recent match result
+    3. Career goal fuzzy match against JobProfile
+    4. Return None (no fallback to first recommended job on backend)
+    """
+    # Priority 1: User manually confirmed job
+    if student.confirmed_job_code:
+        return student.confirmed_job_code, student.confirmed_job_title
+
+    # Priority 2: Most recent match result
+    student_profile = db.scalar(
+        select(StudentProfile).where(StudentProfile.student_id == student.id)
+    )
+    if student_profile:
+        latest_match = db.scalar(
+            select(MatchResult)
+            .where(MatchResult.student_profile_id == student_profile.id)
+            .order_by(MatchResult.created_at.desc())
+            .limit(1)
+        )
+        if latest_match:
+            jp = db.scalar(
+                select(JobProfile).where(JobProfile.id == latest_match.job_profile_id).limit(1)
+            )
+            if jp:
+                return jp.job_code, jp.title
+
+    # Priority 3: Career goal fuzzy match
+    if student.career_goal:
+        jp = db.scalar(
+            select(JobProfile)
+            .where(func.lower(JobProfile.title).contains(student.career_goal.lower()))
+            .limit(1)
+        )
+        if jp:
+            return jp.job_code, jp.title
+
+    return None, None
+
+
 @router.get("/me")
 def get_current_student(
     current_user: User = Depends(get_current_user),
@@ -44,21 +86,13 @@ def get_current_student(
             "major": "",
             "grade": "",
             "career_goal": "",
+            "confirmed_job_code": None,
+            "confirmed_job_title": None,
             "suggested_job_code": None,
             "suggested_job_title": None,
         }
 
-    suggested_job_code = None
-    suggested_job_title = None
-    if student.career_goal:
-        jp = db.scalar(
-            select(JobProfile)
-            .where(func.lower(JobProfile.title).contains(student.career_goal.lower()))
-            .limit(1)
-        )
-        if jp:
-            suggested_job_code = jp.job_code
-            suggested_job_title = jp.title
+    suggested_job_code, suggested_job_title = _resolve_target_job(student, db)
 
     return {
         "student_id": student.id,
@@ -66,9 +100,31 @@ def get_current_student(
         "major": student.major,
         "grade": student.grade,
         "career_goal": student.career_goal,
+        "confirmed_job_code": student.confirmed_job_code,
+        "confirmed_job_title": student.confirmed_job_title,
         "suggested_job_code": suggested_job_code,
         "suggested_job_title": suggested_job_title,
     }
+
+
+class SetTargetJobRequest(BaseModel):
+    job_code: str = Field(..., min_length=1, max_length=80)
+    job_title: str = Field(..., min_length=1, max_length=120)
+
+
+@router.patch("/me/target-job")
+def set_target_job(
+    payload: SetTargetJobRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        return {"ok": False, "error": "学生档案不存在"}
+    student.confirmed_job_code = payload.job_code
+    student.confirmed_job_title = payload.job_title
+    db.commit()
+    return {"ok": True, "confirmed_job_code": payload.job_code, "confirmed_job_title": payload.job_title}
 
 
 @router.get("/me/recommended-jobs")
