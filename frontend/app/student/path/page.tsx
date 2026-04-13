@@ -94,27 +94,69 @@ export default function StudentPathPage() {
             <p style={{ color: "var(--subtle)", margin: "0 0 20px", lineHeight: 1.7 }}>
               {plan?.vertical_graph?.description || plan?.rationale || "基于岗位图谱生成晋升链路。"}
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, alignItems: "stretch" }}>
-              {displayedVerticalNodes.map((node, index, arr) => (
-                <div key={`${node.title}-${index}`} style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
-                  <div style={{ flex: 1, border: "1px solid rgba(15,116,218,0.16)", borderRadius: 8, padding: 16, background: "#fff" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
-                      <span style={{ color: "#0f74da", fontWeight: 700, fontSize: "0.8125rem" }}>L{node.level ?? index + 1}</span>
-                      {node.stage && <span style={{ color: "#0f766e", fontSize: "0.75rem", fontWeight: 700 }}>{node.stage}</span>}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {displayedVerticalNodes.map((node, index, arr) => {
+                const isTarget = node.stage === "当前目标" || index === 0;
+                return (
+                  <div key={`${node.title}-${index}`} style={{ display: "flex", gap: 16 }}>
+                    {/* Timeline rail */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 28, flexShrink: 0 }}>
+                      <div
+                        style={{
+                          width: isTarget ? 14 : 10,
+                          height: isTarget ? 14 : 10,
+                          borderRadius: "50%",
+                          background: isTarget ? "#0f74da" : "#fff",
+                          border: `${isTarget ? 3 : 2}px solid ${isTarget ? "#0f74da" : "#c1cdd9"}`,
+                          flexShrink: 0,
+                          marginTop: 20,
+                          boxShadow: isTarget ? "0 0 0 3px rgba(15,116,218,0.18)" : "none",
+                        }}
+                      />
+                      {index < arr.length - 1 && (
+                        <div style={{ width: 2, flex: 1, background: "#dde5ed", minHeight: 16 }} />
+                      )}
                     </div>
-                    <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>{node.title}</h3>
-                    <p style={{ margin: "0 0 12px", color: "var(--subtle)", fontSize: "0.8125rem", lineHeight: 1.6 }}>{node.description || "围绕岗位要求持续沉淀项目成果。"}</p>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {(node.skills ?? []).slice(0, 4).map((skill) => (
-                        <span key={skill} style={{ padding: "4px 8px", borderRadius: 8, background: "#eef6ff", color: "#0f4f9a", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
-                      ))}
+                    {/* Node card */}
+                    <div
+                      style={{
+                        flex: 1,
+                        border: isTarget ? "2px solid #0f74da" : "1px solid rgba(15,116,218,0.16)",
+                        borderRadius: 8,
+                        padding: 16,
+                        background: isTarget ? "#eef6ff" : "#fff",
+                        marginBottom: 12,
+                        boxShadow: isTarget ? "0 2px 8px rgba(15,116,218,0.12)" : "none",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 10, alignItems: "center" }}>
+                        <span style={{ color: "#0f74da", fontWeight: 700, fontSize: "0.8125rem" }}>L{node.level ?? index + 1}</span>
+                        {node.stage && (
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                              background: isTarget ? "#0f74da" : "#f0fdfa",
+                              color: isTarget ? "#fff" : "#0f766e",
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {node.stage}
+                          </span>
+                        )}
+                      </div>
+                      <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>{node.title}</h3>
+                      <p style={{ margin: "0 0 12px", color: "var(--subtle)", fontSize: "0.8125rem", lineHeight: 1.6 }}>{node.description || "围绕岗位要求持续沉淀项目成果。"}</p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {(node.skills ?? []).slice(0, 4).map((skill) => (
+                          <span key={skill} style={{ padding: "4px 8px", borderRadius: 8, background: "#eef6ff", color: "#0f4f9a", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  {index < arr.length - 1 && (
-                    <div style={{ display: "flex", alignItems: "center", color: "#8aa0b8", fontWeight: 700 }}>→</div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
             {(plan?.vertical_graph?.promotion_paths ?? []).length > 1 && (
               <div style={{ marginTop: 18 }}>
