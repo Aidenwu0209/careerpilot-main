@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _format_profile_score(value: float | int | None) -> str:
+    if value is None:
+        return ""
+    score = float(value)
+    if 0 <= score <= 1:
+        return f"{score * 100:.0f}%"
+    return f"{score:.0f}分"
+
+
 def _build_user_context(db: Session, user_id: int) -> str:
     parts: list[str] = []
 
@@ -52,9 +61,9 @@ def _build_user_context(db: Session, user_id: int) -> str:
                 if scores_text:
                     profile_lines.append(f"能力评分：{scores_text}")
             if profile.completeness_score:
-                profile_lines.append(f"档案完整度：{profile.completeness_score:.0%}")
+                profile_lines.append(f"档案完整度：{_format_profile_score(profile.completeness_score)}")
             if profile.competitiveness_score:
-                profile_lines.append(f"竞争力评分：{profile.competitiveness_score:.0%}")
+                profile_lines.append(f"竞争力评分：{_format_profile_score(profile.competitiveness_score)}")
             if profile_lines:
                 parts.append("【学生能力画像】\n" + "\n".join(profile_lines))
 
@@ -63,7 +72,7 @@ def _build_user_context(db: Session, user_id: int) -> str:
             select(MatchResult)
             .where(MatchResult.student_profile_id == profile.id)
             .order_by(MatchResult.created_at.desc())
-            .first()
+            .limit(1)
         ) if profile else None
         if latest_match:
             match_lines: list[str] = []
@@ -107,7 +116,7 @@ def _build_user_context(db: Session, user_id: int) -> str:
             select(PathRecommendation)
             .where(PathRecommendation.student_id == student.id)
             .order_by(PathRecommendation.created_at.desc())
-            .first()
+            .limit(1)
         )
         if latest_path:
             path_lines: list[str] = []
@@ -142,7 +151,7 @@ def _build_user_context(db: Session, user_id: int) -> str:
             meta = f.meta_json or {}
             ocr_text = meta.get("ocr", {})
             if isinstance(ocr_text, dict):
-                text = ocr_text.get("text", "")
+                text = ocr_text.get("raw_text") or ocr_text.get("text", "")
                 structured = ocr_text.get("structured_json", {})
             elif isinstance(ocr_text, str):
                 text = ocr_text

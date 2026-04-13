@@ -55,7 +55,10 @@ export function SidebarDrawer({ isOpen, onClose, navItems, label, footer, extra 
     return () => window.removeEventListener("keydown", handleEsc);
   }, [isOpen, onClose]);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isActive = (href: string) => {
+    if (pathname.startsWith("/results/") && href === "/student/report") return true;
+    return pathname === href || pathname.startsWith(href + "/");
+  };
 
   return (
     <>

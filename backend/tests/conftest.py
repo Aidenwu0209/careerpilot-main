@@ -26,8 +26,8 @@ def prepare_database():
         TEST_DB_PATH.unlink()
     Base.metadata.create_all(bind=engine)
     yield
-    engine.dispose()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
     if TEST_DB_PATH.exists():
         TEST_DB_PATH.unlink()
 

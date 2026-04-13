@@ -18,6 +18,7 @@ import {
   type ReportExportResult,
 } from "@/lib/api";
 import { SectionCard } from "@/components/SectionCard";
+import { StudentShellClient } from "@/components/StudentShellClient";
 
 const SECTIONS = [
   { key: "matching", title: "职业探索与岗位匹配", desc: "人岗匹配度、专业技能与通用素质差距" },
@@ -150,18 +151,19 @@ export default function ResultPage() {
   const hasGraphData = verticalNodes.length > 0 || transitionRoles.length > 0;
 
   return (
-    <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>完整报告</h1>
-          <p style={{ margin: "6px 0 0", color: "var(--subtle)", fontSize: "0.875rem" }}>
-            报告覆盖职业探索、目标路径、行动计划、编辑导出四个模块。
-          </p>
+    <StudentShellClient title="完整报告">
+      <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12 }}>
+          <div>
+            <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>完整报告</h1>
+            <p style={{ margin: "6px 0 0", color: "var(--subtle)", fontSize: "0.875rem" }}>
+              报告覆盖职业探索、目标路径、行动计划、编辑导出四个模块。
+            </p>
+          </div>
+          <Link href="/student" className="btn-secondary" style={{ textDecoration: "none", padding: "8px 14px", flexShrink: 0 }}>
+            返回问答页
+          </Link>
         </div>
-        <Link href="/student" className="btn-secondary" style={{ textDecoration: "none", padding: "8px 14px", flexShrink: 0 }}>
-          返回问答页
-        </Link>
-      </div>
 
       {loading ? (
         <SectionCard title="加载中">
@@ -309,6 +311,7 @@ export default function ResultPage() {
           </SectionCard>
         </>
       )}
-    </div>
+      </div>
+    </StudentShellClient>
   );
 }

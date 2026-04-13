@@ -370,7 +370,8 @@ class ErnieLLMProvider(BaseLLMProvider):
             temperature=0.2,
             max_tokens=1200,
         )
-        return completion.choices[0].message.content or ""
+        message = completion.choices[0].message
+        return message.content or getattr(message, "reasoning_content", "") or ""
 
     async def generate_job_profile(self, job_posting: dict[str, Any]) -> dict[str, Any]:
         system_prompt = (

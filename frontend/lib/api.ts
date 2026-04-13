@@ -343,7 +343,7 @@ export async function sendChatMessage(message: string): Promise<{ reply: string 
       body: JSON.stringify({ message })
     });
   } catch (error) {
-    if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV === "development" && error instanceof APIError && error.isNetworkError) {
       console.warn("[Fallback] Using demo reply for chat due to error:", error instanceof Error ? error.message : error);
       return { reply: generateDemoChatReply(message) };
     }
