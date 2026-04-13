@@ -24,6 +24,8 @@
 - Pipeline buildSteps() must use "running" status for the current step, not "done"; completed steps are tracked separately via a Set<string> passed as completedKeys parameter.
 - Valid pipeline step keys: uploaded, parsed, profiled, matched, reported. These are defined in PIPELINE_STEP_KEYS constant in page.tsx and VALID_STEPS in analysis.py.
 - In async pipeline functions, track current step with a local variable instead of reading React state from closure — state updates are async and the closure captures stale values.
+- OCR error classification uses OCRError hierarchy: OCRParseError (retryable=false, 422), OCRServiceError (retryable=true, 502), OCRNetworkError (retryable=true, 504). Frontend APIError carries errorCode and retryable fields extracted from structured error response body.
+- file_ingestion.py must let OCRError subtypes propagate directly; only wrap non-OCR exceptions in ValueError.
 ---
 
 ## 2026-04-13 16:10 - US-001
@@ -190,4 +192,20 @@
   - 移动端（640px 以下）进度条缩小 label 和 badge 字号，error-detail max-width 收窄为 100px
   - test_demo_flow.py 和 test_matching.py 的失败均为既有问题
   - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
+
+## 2026-04-13 23:55 - US-014
+- 实现了 OCR 失败的错误分类与重试语义，区分文件不可解析、服务异常和网络或超时异常
+- 更改的文件：backend/app/integrations/ocr/providers.py, backend/app/services/ingestion/file_ingestion.py, backend/app/api/routers/ocr.py, frontend/lib/api.ts, backend/tests/unit/test_ocr.py
+- **未来迭代的学习：**
+  - 新增 OCRError 异常层级：OCRError（基类）→ OCRParseError（文件不可解析，retryable=false）→ OCRServiceError（服务异常，retryable=true）→ OCRNetworkError（网络/超时，retryable=true）
+  - 每个异常携带 error_code、message、retryable 属性，并有 to_dict() 方法供 API 响应使用
+  - MockOCRProvider 在文件无法提取文字时从返回空结果改为抛出 OCRParseError
+  - PaddleOCRProvider 区分 HTTPStatusError → OCRServiceError、TimeoutException → OCRNetworkError、RequestError → OCRNetworkError
+  - OCR 端点捕获 OCRError 子类并映射到 HTTP 状态码：422（parse_error）、502（service_error）、504（network_error），返回结构化 detail 对象
+  - 前端 APIError 新增 errorCode 和 retryable 可选字段，request() 函数从响应 body 中提取这些字段
+  - file_ingestion.py 必须让 OCRError 子类直接传播，不要包装为 ValueError
+  - 前端流水线在 parseOCR 抛出异常时自动停止（已有 catch 机制），无需额外修改
+  - 新增 10 个 OCR 错误分类单元测试，全部通过
+  - test_four_dimension_matching 失败为既有问题（5 维 vs 断言 4 维）
 ---
