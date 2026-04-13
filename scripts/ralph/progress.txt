@@ -50,3 +50,15 @@
   - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
 ---
 ---
+
+## 2026-04-13 17:10 - US-004
+- 实现了换岗路径图谱主视图，从简单 grid 卡片改为左侧角色节点 + 右侧路径详情的水平布局
+- 更改的文件：frontend/app/student/path/page.tsx, frontend/lib/demo-data.ts
+- **未来迭代的学习：**
+  - 换岗图谱采用 flex row 布局：左侧 140px 固定宽角色节点卡片，右侧 flex-1 展示该角色的所有换岗路径
+  - 目标角色节点通过蓝色边框、蓝色背景、蓝色圆形序号标记高亮，与垂直图谱的蓝色主题一致
+  - 路径步骤使用 pill badge + 箭头连接的可视化流程，目标角色的首个步骤使用蓝色填充白字
+  - 技能桥接点使用橙色底色（#fff4e5）+ 深橙色文字（#8a4b00）的标签，与技能标签的蓝色系区分
+  - demo data 的 role_paths 从 2 个扩充到 5 个角色，每个角色至少 2 条路径，满足验收标准
+  - TypeScript 严格模式下 `role.skills` 可能为 undefined，需用 `role.skills?.length ?? 0` 而非 `(role.skills ?? []).length` 来避免 TS18048
+---
