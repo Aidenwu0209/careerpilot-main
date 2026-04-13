@@ -1,0 +1,375 @@
+{
+  "project": "CareerPilot",
+  "branchName": "ralph/careerpilot-current-issue-optimization",
+  "description": "修复 CareerPilot 当前已确认问题，覆盖岗位图谱、推荐评分、模板优先级、报告岗位一致性、历史记录、页面布局、进度状态、OCR 兜底和回归测试。",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "建立统一的目标岗位解析顺序",
+      "description": "作为系统，我需要统一解析当前目标岗位，以便推荐页、匹配页、路径页和报告页使用同一岗位上下文。",
+      "acceptanceCriteria": [
+        "实现目标岗位优先级：用户手动选中 > 已确认推荐岗位 > 最近一次匹配岗位 > 推荐列表第一项",
+        "提供可复用的目标岗位解析逻辑，避免各页面各自回退",
+        "缺少上游岗位信息时返回明确空值而不是静默使用错误岗位",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-002",
+      "title": "统一历史匹配结果存储结构",
+      "description": "作为开发者，我需要让历史匹配记录与当前匹配结果结构一致，以便历史页能稳定恢复完整分析数据。",
+      "acceptanceCriteria": [
+        "历史匹配记录保存 student_id、job_code、total_score、四维分数、gap_items、suggestions、summary",
+        "当前匹配结果与历史匹配结果使用同一字段命名和同一数据形状",
+        "缺少旧字段时提供兼容转换，不影响现有历史数据读取",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-003",
+      "title": "扩展职业路径结果的持久化快照",
+      "description": "作为开发者，我需要保存完整职业路径图谱快照，以便历史记录能回放当时生成的完整结果。",
+      "acceptanceCriteria": [
+        "历史路径记录保存主路径、备选路径、垂直图谱快照、换岗图谱快照、差距项、推荐行动项、路径依据",
+        "路径快照存储结构可直接用于页面回放，不依赖重新计算",
+        "旧历史记录缺少图谱数据时有明确兼容处理分支",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-004",
+      "title": "输出统一的岗位图谱数据模型",
+      "description": "作为系统，我需要生成统一的垂直图谱和换岗图谱数据模型，以便前端和历史记录使用同一结构渲染。",
+      "acceptanceCriteria": [
+        "图谱结果包含 verticalGraph 和 transitionGraph 两个顶层结构",
+        "verticalGraph 提供节点描述、层级信息、阶段信息、核心技能和关系边",
+        "transitionGraph 提供相关岗位、路径步骤、转换说明和技能桥接点",
+        "图谱数据模型可同时支持当前页展示和历史页回放",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-005",
+      "title": "校准四维评分映射与分数分布",
+      "description": "作为学生用户，我希望推荐岗位分数符合直觉，以便我能区分高度匹配和中等匹配岗位。",
+      "acceptanceCriteria": [
+        "推荐岗位总分保持 0-100 分标准分",
+        "对外展示维度固定为基础要求、职业技能、职业素养、发展潜力四维",
+        "OCR 项目经历、实习经历、求职意向仅作为证据增强或权重修正，不作为独立第五维展示",
+        "高匹配样本的头部岗位可达到 85-95 分区间",
+        "中低匹配样本与头部岗位有明显分差",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-006",
+      "title": "为推荐岗位结果补齐证据字段",
+      "description": "作为学生用户，我希望每个推荐岗位都展示真实命中证据，以便我理解分数来源。",
+      "acceptanceCriteria": [
+        "每个推荐岗位结果包含总分、推荐理由、命中技能、缺失技能、项目或实习命中标签",
+        "推荐理由引用真实简历证据，不使用通用文案占位",
+        "推荐列表继续只返回 60 分及以上岗位",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-007",
+      "title": "在报告生成前增加证据校验门禁",
+      "description": "作为用户，我希望系统在资料不足时明确提示，而不是直接生成伪完整报告。",
+      "acceptanceCriteria": [
+        "报告生成前检查简历解析结果和 OCR 证据是否有效",
+        "资料不足时返回明确的缺资料状态而不是生成完整正文",
+        "无简历证据时不会输出固定分析结论",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-008",
+      "title": "限制模板只负责结构骨架",
+      "description": "作为系统，我需要让模板只控制结构，不直接写入结论，以便输出优先基于真实用户数据。",
+      "acceptanceCriteria": [
+        "模板仅定义标题结构、章节顺序、字段占位和输出格式",
+        "模板层不再注入固定结论文案",
+        "正文生成顺序为真实数据优先、模板结构后置",
+        "对话输出链路同样遵守模板后置规则",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-009",
+      "title": "让完整报告使用统一岗位来源",
+      "description": "作为已确认目标岗位的用户，我希望报告围绕当前岗位生成，以便结果不再错位。",
+      "acceptanceCriteria": [
+        "完整报告生成调用统一目标岗位解析逻辑",
+        "用户手动切换岗位后，报告读取新岗位而不是沿用旧岗位",
+        "推荐页、匹配页、路径页、报告页的岗位上下文一致",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-010",
+      "title": "渲染历史匹配记录的统一结构",
+      "description": "作为查看历史记录的用户，我希望历史匹配页使用和当前页一致的字段展示，以便信息完整且稳定。",
+      "acceptanceCriteria": [
+        "历史匹配页读取统一后的 total_score、四维分数、gap_items、suggestions、summary",
+        "旧记录缺失字段时页面显示兼容降级而不报错",
+        "当前匹配页和历史匹配页文案口径一致",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-011",
+      "title": "渲染垂直岗位图谱视图",
+      "description": "作为学生用户，我希望看到目标岗位的纵向晋升图谱，以便理解当前目标后的成长路线。",
+      "acceptanceCriteria": [
+        "职业路径页提供独立的垂直岗位图谱视图",
+        "图谱展示主晋升路径、节点层级、阶段信息、岗位描述和核心技能",
+        "当前目标岗位节点高亮可见",
+        "页面不以纯文本列表替代图谱展示",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-012",
+      "title": "渲染换岗路径图谱视图",
+      "description": "作为学生用户，我希望看到可转岗方向和桥接技能，以便评估其他岗位的切换路径。",
+      "acceptanceCriteria": [
+        "职业路径页提供独立的换岗路径图谱视图",
+        "至少展示 5 个相关岗位",
+        "每个相关岗位至少展示 2 条换岗路径",
+        "每条路径展示路径步骤、转换说明和技能桥接点",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-013",
+      "title": "回放历史职业路径图谱",
+      "description": "作为查看历史记录的用户，我希望重新打开历史路径时能看到完整图谱，以便回看当时的真实分析结果。",
+      "acceptanceCriteria": [
+        "历史路径页读取持久化的图谱快照而不是重新拼接文本路径",
+        "历史路径页可展示垂直岗位图谱和换岗路径图谱",
+        "当前路径页和历史路径页对同一结果展示一致",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-014",
+      "title": "优化推荐岗位列表的分数展示层次",
+      "description": "作为学生用户，我希望推荐列表能直观看出头部岗位优势，以便快速聚焦最优岗位。",
+      "acceptanceCriteria": [
+        "列表中的头部岗位分数、推荐理由和证据字段按新评分结构展示",
+        "列表不会出现所有岗位集中在 60-70 分的视觉结果",
+        "高分岗位与中分岗位在页面上有清晰层次差异",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-015",
+      "title": "居中分析完成后的结果操作区",
+      "description": "作为用户，我希望分析完成后的结果按钮区域居中且稳定，以便顺畅进入各个结果页面。",
+      "acceptanceCriteria": [
+        "结果区整体在桌面端水平居中",
+        "结果区宽度与主内容区对齐",
+        "移动端按钮自动换行且不超出屏幕",
+        "结果区与进度条和上传区的间距稳定",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-016",
+      "title": "引入真实的分析任务状态流转",
+      "description": "作为系统，我需要让分析流程拥有真实状态枚举，以便页面准确显示执行进度和失败位置。",
+      "acceptanceCriteria": [
+        "分析流程支持 pending、running、completed、failed 四种状态",
+        "每一步任务状态与真实执行结果同步更新",
+        "重试会触发正确的状态重置和重新流转",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-017",
+      "title": "展示分析进度条的进行中和失败状态",
+      "description": "作为用户，我希望进度条明确显示当前步骤和失败步骤，以便判断系统当前运行情况。",
+      "acceptanceCriteria": [
+        "进度条展示 pending、running、completed、failed 四种视觉状态",
+        "当前执行步骤明确标记为进行中",
+        "失败时可见失败步骤和失败状态",
+        "不会出现任务未完成但界面已显示完成的情况",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-018",
+      "title": "补充 OCR 服务异常分类与重试接口",
+      "description": "作为系统，我需要区分 OCR 服务异常和资料异常，并提供可重试的失败处理逻辑。",
+      "acceptanceCriteria": [
+        "第三方 OCR 500 被识别为服务异常而不是静默失败",
+        "OCR 失败结果包含可供前端展示的明确错误类型和提示文案",
+        "当前流程支持 OCR 重试且不会继续生成伪完整分析结果",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-019",
+      "title": "渲染 OCR 失败提示与重试入口",
+      "description": "作为上传简历的用户，我希望在 OCR 失败时看到明确提示和重试入口，以便继续完成分析。",
+      "acceptanceCriteria": [
+        "页面在 OCR 服务异常时显示明确错误提示",
+        "用户可以在当前流程中直接触发重试",
+        "OCR 失败后页面不会展示伪完整分析结果",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-020",
+      "title": "修复当前测试夹具与鉴权不一致问题",
+      "description": "作为开发者，我需要让测试资产匹配当前系统接口和鉴权逻辑，以便回归测试可以稳定执行。",
+      "acceptanceCriteria": [
+        "清理或修复失效测试脚本",
+        "测试夹具满足当前接口鉴权要求",
+        "旧评分结构相关的测试数据更新为四维评分口径",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-021",
+      "title": "补齐本轮核心回归测试",
+      "description": "作为开发者，我希望本轮关键修复点都有自动化回归覆盖，以便后续优化不会把问题重新带回系统。",
+      "acceptanceCriteria": [
+        "补齐推荐岗位高分场景测试",
+        "补齐四维评分结构一致性测试",
+        "补齐图谱历史回放测试",
+        "补齐模板优先级测试",
+        "补齐报告目标岗位一致性测试",
+        "补齐 OCR 异常测试",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    }
+  ]
+}

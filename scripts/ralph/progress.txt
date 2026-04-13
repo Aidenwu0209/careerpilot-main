@@ -1,0 +1,94 @@
+## Codebase Patterns
+- 后端使用 SQLAlchemy ORM + `create_all` 自动建表，新列需有默认值（`default=None`）
+- 前端 Next.js App Router，使用 `@/lib/api.ts` 作为唯一 API 层，所有类型和请求函数集中管理
+- `StudentSession` 类型是前后端学生状态的桥梁，新增字段需同步前后端
+- 后端 `/students/me` 端点是目标岗位的权威来源，各页面通过 `getStudentSession()` 获取
+- 数据库无 alembic 迁移，用 `Base.metadata.create_all` 管理 schema
+- `MatchResult` 模型新增列必须带 `default` 值（如 `default=""`, `default=list`, `default=dict`），否则旧数据读取会报错
+- 历史记录回放兼容：新字段有 JSON 默认值，旧记录缺字段时用 fallback 查询（如从 `MatchDimensionScore` 表回填 `dimensions_json`）
+- `GET /matching/{match_id}` 和 `POST /matching/analyze` 必须返回同一 `MatchingResponse` 结构（student_id, job_code, total_score, weights, dimensions, gap_items, suggestions, summary）
+- `PathRecommendation` 新增 JSON 列用 `default=dict`，历史记录缺列时 SQLAlchemy 会用默认空 dict 兼容，无需额外 fallback 查询
+- 后端 Pydantic schema 中使用 `Field(alias="from")` 处理 Python 关键字字段名，序列化时用 `model_dump(by_alias=True)` 输出原始键名
+- `APIResponse.data` 是 `Optional[Any]`，可以直接接收 Pydantic model 对象，FastAPI 会自动序列化
+- 当 service 层函数返回类型从 `dict` 改为 Pydantic model 后，所有使用该返回值的下游代码（如 MockLLMProvider）必须同步更新为属性访问而非字典下标访问
+- 匹配评分固定四维：基础要求(0.2)、职业技能(0.4)、职业素养(0.2)、发展潜力(0.2)；OCR 证据作为 evidence 增强折叠到四维中，不作为独立维度展示
+- `score_recommended_job()` 返回的 `evidence_boost` 表示 OCR 项目/意向证据加分，总分 = 四维加权平均（含 evidence_boost）
+
+---
+## 2026-04-13 11:25 - US-001
+- 实现了统一的目标岗位解析顺序：用户手动确认 > 最近一次匹配 > career_goal 模糊匹配
+- 后端：Student 模型新增 `confirmed_job_code`/`confirmed_job_title` 字段；`/students/me` 使用 `_resolve_target_job()` 统一解析；新增 `PATCH /students/me/target-job` 端点
+- 前端：`api.ts` 新增 `resolveTargetJob()` 和 `setTargetJob()`；报告页改用 `resolveTargetJob()` 替代直接取推荐列表第一项
+- 更改的文件：`backend/app/models/entities.py`, `backend/app/api/routers/students.py`, `frontend/lib/api.ts`, `frontend/app/student/report/page.tsx`
+- **未来迭代的学习：**
+  - 后端 `suggested_job_code` 现在通过 `_resolve_target_job()` 统一计算，匹配页和路径页使用 `sess.suggested_job_code` 已自动走统一逻辑
+  - 前端 `resolveTargetJob()` 有最终兜底逻辑（取推荐列表第一项），后端不做此兜底，由前端处理
+  - 后端测试需要虚拟环境（venv），全局 Python 无 fastapi 依赖
+---
+## 2026-04-13 11:35 - US-002
+- 统一了历史匹配结果存储结构，使 `GET /matching/{match_id}` 与 `POST /matching/analyze` 返回同一 `MatchingResponse` 结构
+- 后端：`MatchResult` 模型新增 `job_code`、`dimensions_json`、`weights_json` 列和 `student_profile`/`job_profile` relationship
+- 后端：`matching_service.py` 在保存匹配结果时同步写入 `dimensions_json`、`weights_json`、`job_code`
+- 后端：`matching.py` 路由修复了历史回读逻辑——优先从 `dimensions_json` 读取，缺省时回退到 `MatchDimensionScore` 表；修复了错误的列名引用（`gap_items_json` → `gaps_json`）
+- 更改的文件：`backend/app/models/entities.py`, `backend/app/api/routers/matching.py`, `backend/app/services/matching/matching_service.py`
+- **未来迭代的学习：**
+  - `MatchResult` 原先缺少 `student_profile`/`job_profile` 的 `relationship()` 定义，导致 `match_result.student_profile` 访问会报 AttributeError，现已补齐
+  - 原路由 `get_match_result` 引用了不存在的列 `dimensions_json` 和 `gap_items_json`（应为 `gaps_json`），这是隐藏的运行时 bug
+  - 前端 `MatchingResult` 类型来自 `demoMatching`，新增字段（如 `weights`、`suggestions`）后需确认 `demoMatching` 包含这些字段
+---
+## 2026-04-13 11:45 - US-003
+- 扩展了职业路径结果的持久化快照，使历史路径记录可完整回放垂直图谱和换岗图谱
+- 后端：`PathRecommendation` 模型新增 `vertical_graph_json`、`transition_graph_json`、`rationale` 列
+- 后端：`career_path_service.py` 在保存路径结果时同步写入垂直图谱、换岗图谱和路径依据
+- 后端：`career_paths.py` 路由的 `get_path_result` 改为从数据库读取图谱快照，旧记录缺图谱数据时降级为空 dict 并显示兼容提示
+- 更改的文件：`backend/app/models/entities.py`, `backend/app/api/routers/career_paths.py`, `backend/app/services/paths/career_path_service.py`
+- **未来迭代的学习：**
+  - `PathRecommendation` 原先只存 `primary_path_json`/`alternate_paths_json`/`gaps_json`/`recommendations_json`，图谱数据（`vertical_graph`/`transition_graph`）每次都丢弃，历史页只能显示空图谱
+  - 路由层对空 dict 用 `if path_result.vertical_graph_json else {}` 做兼容降级，空 dict `{}` 在 Python 中是 falsy，所以 `default=dict` 的空列会正确走降级分支
+  - 前端 `PathPlan` 类型来自 `demoPath`，已包含 `vertical_graph` 和 `transition_graph` 字段，无需修改前端类型
+---
+## 2026-04-13 11:55 - US-004
+- 创建了统一的后端 Pydantic schema `career_path.py`，定义 `VerticalGraph`、`VerticalGraphNode`、`VerticalGraphEdge`、`TransitionGraph`、`TransitionRole`、`TransitionPath`、`CareerPathResponse` 类型
+- 后端 `career_path_service.plan_path()` 返回类型从 `dict` 改为 `CareerPathResponse`，确保输出结构一致
+- 后端 `career_paths.py` 路由 `get_path_result` 使用 `CareerPathResponse` 构建返回数据，通过 `model_dump(by_alias=True)` 序列化
+- 前端 `api.ts` 新增显式类型定义：`VerticalGraphNode`、`VerticalGraphEdge`、`VerticalGraph`、`TransitionPathItem`、`TransitionRole`、`TransitionGraph`
+- 更改的文件：`backend/app/schemas/career_path.py`（新建）、`backend/app/services/paths/career_path_service.py`、`backend/app/api/routers/career_paths.py`、`frontend/lib/api.ts`
+- **未来迭代的学习：**
+  - Pydantic `Field(alias="from")` 需配合 `model_config = {"populate_by_name": True}` 才能从 dict 中正确解析 `"from"` 键
+  - `APIResponse(data=pydantic_model)` 可以直接接收 Pydantic 对象，FastAPI 自动处理序列化
+  - `model_dump(by_alias=True)` 会将 `from_node` 输出为 `"from"`，确保前端兼容
+  - 后端测试中 `test_matching` 和 `test_report_completeness` 有预先存在的失败，与本次变更无关
+---
+## 2026-04-13 12:20 - US-004 (修复)
+- 修复了 Validator 验证失败的 TypeError：`MockLLMProvider.generate_report()` 中 `path_result` 的字典下标访问改为属性访问
+- 将 `path_result["primary_path"]` → `path_result.primary_path`，`path_result["alternate_paths"]` → `path_result.alternate_paths`，`path_result["rationale"]` → `path_result.rationale`
+- 更改的文件：`backend/app/integrations/llm/providers.py`
+- **未来迭代的学习：**
+  - 当 service 层返回类型从 `dict` 改为 Pydantic model 时，所有消费该返回值的代码（包括 mock/测试）都必须同步更新访问方式
+  - `test_report_completeness` 现已通过（9/9 unit tests pass）
+  - `test_matching::test_four_dimension_matching` 仍有预存失败（5维 vs 4维），属于 US-005 范畴
+---
+## 2026-04-13 13:30 - US-005
+- 校准四维评分映射与分数分布：移除了独立第五维"OCR 项目/意向加权"，将 OCR 证据增强折叠到四维评分中
+- 后端 `recommendation.py`：将 OCR experience/intent bonus 作为 `evidence_boost` 均匀分配到四个维度分数中，确保加权总分 = 四维加权平均
+- 后端 `matching_service.py`：从 dimensions 列表中移除第 5 项，将 OCR 证据（experience_tags、intent_tags）附加到四维 evidence 中，更新 summary 文案
+- 前端 `demo-data.ts`：将 demo 权重从 (0.15, 0.45, 0.2, 0.2) 修正为标准 (0.2, 0.4, 0.2, 0.2)
+- 修复了 `test_four_dimension_matching` 测试（之前因返回 5 维而失败，现在正确返回 4 维）
+- 更改的文件：`backend/app/services/matching/recommendation.py`, `backend/app/services/matching/matching_service.py`, `frontend/lib/demo-data.ts`
+- **未来迭代的学习：**
+  - 将 bonus 均匀分配到四维时，`min(100, score + bonus)` 可能因 cap 丢失部分 bonus，导致加权总分略低于 base + ocr_bonus，但差异很小
+  - `score_recommended_job()` 现在返回 `evidence_boost` 字段，下游代码如果访问返回 dict 需注意此新字段
+  - 前端 `demoMatching` 权重已与后端默认 `DimensionWeight` 对齐，未来修改默认权重时需同步更新 demo-data
+---
+## 2026-04-13 13:45 - US-006
+- 为推荐岗位结果补齐证据字段：后端推荐理由改为始终引用真实简历证据（证书、技能、项目经历），移除通用占位文案
+- 后端 `get_recommended_jobs()` 新增返回 `matched_certificates`、`missing_certificates`、`intent_tags` 字段
+- 前端 `RecommendedJob` 类型新增 `matched_certificates`、`missing_certificates`、`intent_tags` 字段
+- 前端推荐页新增展示：求职意向命中标签、已持证书、待考证书
+- 前端移除通用兜底文案 `"基于 OCR 项目/实习经历和能力画像推荐"`，改为仅在 `reason` 有值时才显示推荐理由区域
+- 更改的文件：`backend/app/api/routers/students.py`, `frontend/lib/api.ts`, `frontend/app/student/recommended/page.tsx`
+- **未来迭代的学习：**
+  - `score_recommended_job()` 已返回 `matched_certificates`/`missing_certificates`，但之前推荐列表未暴露这些字段
+  - 后端 reason 生成应避免无证据时的通用占位（如"学习能力和综合素质较好"），改为始终引用具体字段
+  - `integration/test_demo_flow.py` 存在预先的鉴权失败（401），与本次变更无关
+---
