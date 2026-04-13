@@ -340,6 +340,7 @@ export default function RecommendedJobsPage() {
                   </div>
 
                   {/* Reason */}
+                  {job.reason && (
                   <div style={{
                     background: "#f8f9fa",
                     padding: "10px 12px",
@@ -347,9 +348,10 @@ export default function RecommendedJobsPage() {
                     marginBottom: "12px",
                   }}>
                     <p style={{ fontSize: "0.8125rem", color: "#555", margin: 0, lineHeight: 1.5 }}>
-                      {job.reason || "基于 OCR 项目/实习经历和能力画像推荐"}
+                      {job.reason}
                     </p>
                   </div>
+                  )}
 
                   {/* Meta Info */}
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
@@ -414,6 +416,52 @@ export default function RecommendedJobsPage() {
                     </div>
                   )}
 
+                  {/* Intent Tags */}
+                  {(job.intent_tags ?? []).length > 0 && (
+                    <div style={{ marginBottom: "12px" }}>
+                      <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#333", margin: "0 0 8px" }}>
+                        求职意向命中
+                      </p>
+                      <div className="badge-list">
+                        {job.intent_tags!.map((tag) => (
+                          <span key={tag} style={{
+                            fontSize: "0.8125rem",
+                            padding: "4px 10px",
+                            borderRadius: "4px",
+                            background: "#fce4ec",
+                            color: "#c62828",
+                            fontWeight: 500,
+                          }}>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Matched Certificates */}
+                  {(job.matched_certificates ?? []).length > 0 && (
+                    <div style={{ marginBottom: "12px" }}>
+                      <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#333", margin: "0 0 8px" }}>
+                        已持证书
+                      </p>
+                      <div className="badge-list">
+                        {job.matched_certificates!.map((cert) => (
+                          <span key={cert} style={{
+                            fontSize: "0.8125rem",
+                            padding: "4px 10px",
+                            borderRadius: "4px",
+                            background: "#e8f5e9",
+                            color: "#2e7d32",
+                            fontWeight: 500,
+                          }}>
+                            {cert}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Matched Skills */}
                   {matched.length > 0 && (
                     <div style={{ marginBottom: missing.length > 0 ? "12px" : "0" }}>
@@ -439,7 +487,7 @@ export default function RecommendedJobsPage() {
 
                   {/* Missing Skills */}
                   {missing.length > 0 && (
-                    <div style={{ marginBottom: (job.tags || []).length > 0 ? "12px" : "0" }}>
+                    <div style={{ marginBottom: ((job.missing_certificates ?? []).length > 0 || (job.tags || []).length > 0) ? "12px" : "0" }}>
                       <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#333", margin: "0 0 8px" }}>
                         + 可补强技能
                       </p>
@@ -454,6 +502,29 @@ export default function RecommendedJobsPage() {
                             fontWeight: 500,
                           }}>
                             {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Missing Certificates */}
+                  {(job.missing_certificates ?? []).length > 0 && (
+                    <div style={{ marginBottom: (job.tags || []).length > 0 ? "12px" : "0" }}>
+                      <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#333", margin: "0 0 8px" }}>
+                        + 待考证书
+                      </p>
+                      <div className="badge-list">
+                        {job.missing_certificates!.map((cert) => (
+                          <span key={cert} style={{
+                            fontSize: "0.8125rem",
+                            padding: "4px 10px",
+                            borderRadius: "4px",
+                            background: "#fff3e0",
+                            color: "#e65100",
+                            fontWeight: 500,
+                          }}>
+                            {cert}
                           </span>
                         ))}
                       </div>

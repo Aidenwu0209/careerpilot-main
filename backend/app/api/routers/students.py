@@ -192,18 +192,23 @@ def get_recommended_jobs(
             matched = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"] + scoring["intent_tags"]))[:6]
             missing = scoring["missing_skills"][:4]
 
+            # Build evidence-based reason — always cite concrete evidence
+            evidence_parts: list[str] = []
+            if scoring["matched_certificates"]:
+                evidence_parts.append(f"持有 {', '.join(scoring['matched_certificates'][:3])}")
+            if scoring["experience_reason"]:
+                evidence_parts.append(scoring["experience_reason"])
+            if matched:
+                evidence_parts.append(f"已掌握 {', '.join(matched[:4])}")
+
             if scoring["intent_tags"]:
-                reason = f"OCR 意向岗位命中 {', '.join(scoring['intent_tags'])}，并结合项目/技能证据推荐。"
-            elif scoring["experience_reason"]:
-                reason = scoring["experience_reason"]
-            elif len(matched) >= 3:
-                reason = f"已掌握 {', '.join(matched[:3])} 等核心技能。"
-            elif len(matched) >= 1:
-                reason = f"已掌握 {', '.join(matched)}，可补强 {', '.join(missing[:2])} 等技能。"
-            elif scoring["potential_score"] >= 80:
-                reason = "学习能力和综合素质较好，适合冲刺此方向。"
+                reason = f"OCR 意向岗位命中 {', '.join(scoring['intent_tags'])}；{'；'.join(evidence_parts)}"
+            elif evidence_parts:
+                reason = "；".join(evidence_parts) + ("。" if not evidence_parts[0].endswith("。") else "")
+            elif missing:
+                reason = f"当前缺少 {', '.join(missing[:3])}，建议优先补齐。"
             else:
-                reason = f"建议重点补齐 {', '.join(missing[:3])} 等技能。"
+                reason = "基础画像符合岗位最低门槛。"
 
             jobs.append({
                 "job_code": jp.job_code,
@@ -218,7 +223,10 @@ def get_recommended_jobs(
                 "tags": skills,
                 "matched_tags": matched,
                 "missing_tags": missing,
+                "matched_certificates": scoring["matched_certificates"],
+                "missing_certificates": scoring["missing_certificates"],
                 "experience_tags": scoring["experience_tags"],
+                "intent_tags": scoring["intent_tags"],
                 "reason": reason,
                 "match_score": scoring["score"],
                 "base_score": scoring["base_score"],

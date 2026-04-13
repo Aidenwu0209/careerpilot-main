@@ -598,7 +598,10 @@ export type RecommendedJob = {
   tags: string[];
   matched_tags?: string[];
   missing_tags?: string[];
+  matched_certificates?: string[];
+  missing_certificates?: string[];
   experience_tags?: string[];
+  intent_tags?: string[];
   reason?: string;
   match_score: number | null;
   base_score?: number | null;
