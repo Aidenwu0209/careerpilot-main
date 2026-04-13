@@ -4,7 +4,7 @@
 - Source PRD: tasks/prd-careerpilot-platform-optimization.md
 - Created: 2026-04-14
 - Total Stories: 38
-- Completed Stories: 3
+- Completed Stories: 4
 
 ## Codebase Patterns
 - 后端使用 FastAPI + SQLAlchemy 2.0（Mapped/mapped_column 声明式）+ SQLite/PostgreSQL
@@ -119,4 +119,30 @@
   - `generate_profile` 返回 `profile_version_id`，后续 US-006/US-007 可以直接使用
   - Router 层通过 `try/except ValueError` 转为 400，是处理 service 层业务校验的标准模式
   - 测试上传文件必须使用 `python-docx` 生成有效 DOCX，不能用 fake PDF bytes
+---
+
+## 2026-04-14 22:30 - US-006
+- 实现了画像版本持久化与证据链快照
+  - 模型：`ProfileVersion` 新增 `uploaded_file_ids`（JSON list）、`file_summaries_json`（JSON list）、`evidence_snapshot_json`（JSON list）三个独立字段
+  - 模型：`StudentProfile` 新增 `projects_json` 和 `internships_json` 字段
+  - Schema：`StudentProfileOut` 新增 `projects`、`internships` 字段；新增 `ProfileVersionOut` schema 含全部版本字段
+  - Service：`generate_profile` 在创建 ProfileVersion 时写入文件摘要和证据快照到独立字段
+  - Router：`GET /{student_id}/versions` 返回新字段；新增 `GET /{student_id}/versions/{version_id}` 详情端点
+  - LLM Mock：`generate_student_profile` 返回新增 `projects` 和 `internships` 字段
+  - 前端：`ProfileVersionItem` 类型新增 `uploaded_file_ids`、`file_summaries`、`evidence_snapshot`；demo 数据新增 `projects`、`internships`
+  - 测试：新增 18 个测试用例覆盖版本字段完整性（6个）、画像输出字段（5个）、版本详情端点（2个）、多版本递增（2个）、快照完整性（2个）、手动输入（1个）
+- 更改的文件：
+  - `backend/app/models/entities.py` — ProfileVersion 和 StudentProfile 新增字段
+  - `backend/app/schemas/profile.py` — 新增 ProfileVersionOut、FileSummary schema
+  - `backend/app/services/profiles/student_profile_service.py` — 收集文件摘要、存储新字段
+  - `backend/app/api/routers/student_profiles.py` — 新增版本详情端点、更新列表返回
+  - `backend/app/integrations/llm/providers.py` — Mock LLM 返回 projects/internships
+  - `frontend/lib/api.ts` — ProfileVersionItem 类型更新
+  - `frontend/lib/demo-data.ts` — demo 数据更新
+  - `backend/tests/unit/test_profile_version_evidence.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `ProfileVersion` 现在有 `uploaded_file_ids`、`file_summaries_json`、`evidence_snapshot_json` 独立字段，不再需要从 `snapshot_json` 中解析
+  - `snapshot_json` 不再包含 `evidence` 字段，证据链已独立存储在 `evidence_snapshot_json`
+  - 文件上传后 `file_name` 是 UUID 格式（如 `cdd22e57-...docx`），不是原始文件名
+  - 前端 `node_modules` 未安装，前端构建检查需要先 `npm install`
 ---
