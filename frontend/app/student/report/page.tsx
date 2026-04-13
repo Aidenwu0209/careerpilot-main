@@ -43,7 +43,11 @@ export default function StudentReportEntryPage() {
         setMessage(`正在基于最新 OCR 简历生成完整报告：${targetJob.jobTitle}`);
         const report = await generateReport(session.student_id, targetJob.jobCode);
         if (!cancelled) {
-          router.replace(`/results/${report.report_id}`);
+          if (report.status === "insufficient_data" && report.missing_evidence) {
+            setError("资料不足，无法生成完整报告：\n" + report.missing_evidence.join("\n"));
+          } else {
+            router.replace(`/results/${report.report_id}`);
+          }
         }
       } catch (err) {
         if (!cancelled) {

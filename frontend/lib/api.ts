@@ -65,6 +65,7 @@ export type ReportDraft = {
   markdown_content: string;
   content: Record<string, unknown>;
   status: string;
+  missing_evidence?: string[];
 };
 
 export type StudentSession = {

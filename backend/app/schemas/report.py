@@ -22,9 +22,10 @@ class ReportResponse(BaseModel):
     report_id: int
     student_id: int
     job_code: str
-    content: ReportContent
-    markdown_content: str
+    content: ReportContent | dict = {}
+    markdown_content: str = ""
     status: str
+    missing_evidence: list[str] | None = None
 
 
 class ReportPolishRequest(BaseModel):

@@ -31,6 +31,31 @@ class ReportService:
         self.career_path_service = career_path_service
         self.settings = get_settings()
 
+    @staticmethod
+    def _check_evidence_sufficiency(student_profile: StudentProfile, ocr: dict) -> list[str]:
+        """Check if enough evidence exists to generate a meaningful report.
+
+        Returns a list of missing evidence descriptions. Empty list means sufficient.
+        """
+        missing: list[str] = []
+        structured = ocr.get("structured_json") if isinstance(ocr, dict) else {}
+        structured = structured if isinstance(structured, dict) else {}
+
+        has_skills = bool(student_profile.skills_json and len(student_profile.skills_json) > 0)
+        has_certificates = bool(student_profile.certificates_json and len(student_profile.certificates_json) > 0)
+        has_ocr_data = bool(structured) or bool(ocr.get("raw_text"))
+
+        if not has_ocr_data:
+            missing.append("简历 OCR 解析结果为空，请确认简历已成功上传并完成解析")
+
+        if not has_skills:
+            missing.append("学生画像中缺少技能信息，无法进行岗位匹配分析")
+
+        if student_profile.capability_scores is None:
+            missing.append("学生画像中缺少能力评分，无法评估岗位契合度")
+
+        return missing
+
     async def generate_report(self, db: Session, student_id: int, job_code: str) -> dict:
         student = db.get(Student, student_id)
         student_profile = db.scalar(select(StudentProfile).where(StudentProfile.student_id == student_id))
@@ -38,6 +63,20 @@ class ReportService:
         if not student or not student_profile or not job_profile:
             raise ValueError("生成报告前请先准备学生画像与岗位画像")
         latest_ocr = self._latest_resume_ocr(db, student.user_id, job_profile, student_profile.source_summary)
+
+        # Evidence gate: check sufficiency before generating
+        missing_evidence = self._check_evidence_sufficiency(student_profile, latest_ocr)
+        if missing_evidence:
+            return {
+                "report_id": 0,
+                "student_id": student_id,
+                "job_code": job_code,
+                "content": {},
+                "markdown_content": "",
+                "status": "insufficient_data",
+                "missing_evidence": missing_evidence,
+            }
+
         student_name = self._student_name_from_ocr(student, latest_ocr)
         report = db.scalar(
             select(CareerReport)
