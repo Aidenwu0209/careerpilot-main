@@ -212,10 +212,33 @@ def score_recommended_job(
     )
     experience_result = score_experience_context(experience or {}, job_profile, posting)
     intent_result = score_target_intent(experience or {}, job_profile)
+
+    # Fold OCR evidence into the four dimension scores as evidence enhancement
+    exp_bonus = round(experience_result["score"] * 0.28, 1)
+    intent_bonus = round(intent_result["score"], 1)
+    evidence_boost = round(exp_bonus + intent_bonus, 1)
+
+    # Distribute evidence boost across dimensions proportionally to weights
+    basic_score = min(100.0, round(basic_score + evidence_boost, 1))
+    skill_score = min(100.0, round(skill_score + evidence_boost, 1))
+    literacy_score = min(100.0, round(literacy_score + evidence_boost, 1))
+    potential_score = min(100.0, round(potential_score + evidence_boost, 1))
+
     final_score = round(
-        min(100.0, base_score + experience_result["score"] * 0.28 + intent_result["score"]),
+        basic_score * weights.get("basic_requirements", 0.2)
+        + skill_score * weights.get("professional_skills", 0.4)
+        + literacy_score * weights.get("professional_literacy", 0.2)
+        + potential_score * weights.get("development_potential", 0.2),
         1,
     )
+
+    # Attach OCR evidence to relevant dimensions
+    basic_evidence["experience_tags"] = experience_result.get("tags", [])
+    skill_evidence["experience_tags"] = experience_result.get("tags", [])
+    literacy_evidence["experience_tags"] = experience_result.get("tags", [])
+    potential_evidence["intent_tags"] = intent_result.get("tags", [])
+    potential_evidence["intent_bonus"] = intent_bonus
+
     return {
         "score": final_score,
         "base_score": base_score,
@@ -230,6 +253,7 @@ def score_recommended_job(
         "missing_certificates": basic_evidence.get("missing_certificates", []),
         "skill_score": round(skill_score, 1),
         "potential_score": round(potential_score, 1),
+        "evidence_boost": evidence_boost,
         "dimensions": {
             "basic_requirements": {"score": basic_score, "evidence": basic_evidence},
             "professional_skills": {"score": skill_score, "evidence": skill_evidence},

@@ -69,17 +69,6 @@ class MatchingService:
                     "reasoning": "根据学习能力、创新能力和画像完整度评估长期成长性。",
                     "evidence": potential_evidence,
                 },
-                {
-                    "dimension": "OCR 项目/意向加权",
-                    "score": scoring["experience_score"],
-                    "weight": 0.28,
-                    "reasoning": "根据 OCR 原文中的项目经历、实习经历和意向岗位对岗位相关性进行补充加权。",
-                    "evidence": {
-                        "experience_tags": scoring["experience_tags"],
-                        "intent_tags": scoring["intent_tags"],
-                        "intent_bonus": scoring["intent_bonus"],
-                    },
-                },
             ]
             total_score = scoring["score"]
             gap_items = []
@@ -93,10 +82,13 @@ class MatchingService:
                 "按月复盘岗位技能覆盖率并更新行动计划。",
             ]
             strengths = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"][:3]))
+            ocr_note = ""
+            if scoring.get("evidence_boost", 0) > 0:
+                ocr_note = f"（含项目经历与求职意向证据加分 {scoring['evidence_boost']:.1f} 分）"
             summary = (
                 f"目标岗位为 {job_profile.title}。"
                 f"当前核心技能匹配度 {skill_score:.1f} 分，基础画像分 {scoring['base_score']:.1f} 分，"
-                f"OCR 项目/意向加权后综合得分 {total_score:.1f} 分。"
+                f"综合得分 {total_score:.1f} 分{ocr_note}。"
                 f"优势主要体现在 {', '.join(strengths) or '项目经历与学习潜力'}，"
                 f"短板集中在 {', '.join(item['name'] for item in gap_items[:3]) or '证书与项目表达'}。"
             )

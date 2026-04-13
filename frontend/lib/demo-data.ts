@@ -28,14 +28,14 @@ export const demoMatching = {
   job_code: "J-PM-001",
   total_score: 85.6,
   weights: {
-    basic_requirements: 0.15,
-    professional_skills: 0.45,
+    basic_requirements: 0.2,
+    professional_skills: 0.4,
     professional_literacy: 0.2,
     development_potential: 0.2
   },
   dimensions: [
-    { dimension: "基础要求", score: 78, weight: 0.15, reasoning: "证书部分满足，实习经历匹配度高", evidence: {} },
-    { dimension: "职业技能", score: 87, weight: 0.45, reasoning: "需求分析和原型设计能力覆盖较高", evidence: {} },
+    { dimension: "基础要求", score: 78, weight: 0.2, reasoning: "证书部分满足，实习经历匹配度高", evidence: {} },
+    { dimension: "职业技能", score: 87, weight: 0.4, reasoning: "需求分析和原型设计能力覆盖较高", evidence: {} },
     { dimension: "职业素养", score: 86, weight: 0.2, reasoning: "沟通与抗压表现稳定", evidence: {} },
     { dimension: "发展潜力", score: 88, weight: 0.2, reasoning: "学习能力与创新能力较强", evidence: {} }
   ],
