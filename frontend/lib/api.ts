@@ -574,3 +574,52 @@ export async function getJobsList(skip: number = 0, limit: number = 100): Promis
   const res = await request<{ data: { total: number; items: JobListItem[]; pagination: { total: number } } }>(`/jobs?skip=${skip}&limit=${limit}`);
   return { total: res.data.pagination?.total ?? res.data.total ?? 0, items: res.data.items };
 }
+
+// --- Analysis Pipeline State ---
+
+export type AnalysisRunState = {
+  run_id: number;
+  status: "pending" | "running" | "completed" | "failed";
+  current_step: string;
+  failed_step: string;
+  error_detail: string;
+  step_results: Record<string, boolean>;
+};
+
+export async function startAnalysisRun(studentId: number, jobCode: string, fileIds: number[]): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>("/analysis/start", {
+    method: "POST",
+    body: JSON.stringify({ student_id: studentId, job_code: jobCode, file_ids: fileIds }),
+  });
+}
+
+export async function getAnalysisRun(runId: number): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}`);
+}
+
+export async function getLatestAnalysis(): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>("/analysis/latest");
+}
+
+export async function markStepRunning(runId: number, stepKey: string): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}/step/${stepKey}/running`, { method: "POST" });
+}
+
+export async function markStepComplete(runId: number, stepKey: string): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}/step/${stepKey}/complete`, { method: "POST" });
+}
+
+export async function markStepFailed(runId: number, stepKey: string, errorDetail: string): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}/step/${stepKey}/fail`, {
+    method: "POST",
+    body: JSON.stringify({ error_detail: errorDetail }),
+  });
+}
+
+export async function markAnalysisComplete(runId: number): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}/complete`, { method: "POST" });
+}
+
+export async function resetAnalysisRun(runId: number): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}/reset`, { method: "POST" });
+}

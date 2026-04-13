@@ -17,8 +17,15 @@ import {
   generateReport,
   getGreeting,
   updateTargetJob,
+  startAnalysisRun,
+  markStepRunning,
+  markStepComplete,
+  markStepFailed,
+  markAnalysisComplete,
+  resetAnalysisRun,
   type UploadedFileInfo,
   type StudentSession,
+  type AnalysisRunState,
   APIError,
 } from "@/lib/api";
 import { PipelineProgress, type PipelineStep, type PipelineStepStatus } from "@/components/PipelineProgress";
@@ -87,7 +94,8 @@ function getUserId(): number | null {
 function buildSteps(
   currentKey: string | null,
   errorKey: string | null,
-  errorDetail?: string
+  errorDetail?: string,
+  completedKeys?: Set<string>,
 ): PipelineStep[] {
   const idx = currentKey ? PIPELINE_STEP_KEYS.indexOf(currentKey as typeof PIPELINE_STEP_KEYS[number]) : -1;
   return PIPELINE_STEP_KEYS.map((key, i) => {
@@ -96,10 +104,12 @@ function buildSteps(
     if (errorKey === key) {
       status = "error";
       detail = errorDetail;
+    } else if (completedKeys?.has(key)) {
+      status = "done";
     } else if (idx >= 0 && i < idx) {
       status = "done";
     } else if (idx >= 0 && i === idx) {
-      status = "done";
+      status = "running";
     } else if (currentKey === null && i === 0) {
       status = "pending";
     }
@@ -132,6 +142,8 @@ export default function StudentMainPage() {
   const [pipelineErrorDetail, setPipelineErrorDetail] = useState<string | undefined>();
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [pipelineDone, setPipelineDone] = useState(false);
+  const [pipelineCompletedSteps, setPipelineCompletedSteps] = useState<Set<string>>(new Set());
+  const [analysisRunId, setAnalysisRunId] = useState<number | null>(null);
   const [reportId, setReportId] = useState<number | null>(null);
   const [greeting, setGreeting] = useState({ title: "你好，想了解什么职业方向？", sub: "输入你感兴趣的岗位方向或上传简历，AI 帮你分析" });
 
@@ -198,29 +210,58 @@ export default function StudentMainPage() {
       setPipelineDone(false);
       setPipelineError(null);
       setPipelineErrorDetail(undefined);
+      setPipelineCompletedSteps(new Set());
+
+      let runId: number | null = null;
 
       try {
-        setPipelineCurrent("uploaded");
+        // Start backend analysis run
+        const run = await startAnalysisRun(sid, jCode, fileIds);
+        runId = run.run_id;
+        setAnalysisRunId(runId);
 
+        // Step 1: uploaded
+        setPipelineCurrent("uploaded");
+        await markStepRunning(runId, "uploaded");
+        await markStepComplete(runId, "uploaded");
+        setPipelineCompletedSteps((prev) => new Set(prev).add("uploaded"));
+
+        // Step 2: parsed (OCR)
         setPipelineCurrent("parsed");
+        await markStepRunning(runId, "parsed");
         for (const fid of fileIds) {
           await parseOCR(fid, "resume");
         }
+        await markStepComplete(runId, "parsed");
+        setPipelineCompletedSteps((prev) => new Set(prev).add("parsed"));
 
+        // Step 3: profiled
         setPipelineCurrent("profiled");
+        await markStepRunning(runId, "profiled");
         await generateStudentProfile(sid, fileIds);
+        await markStepComplete(runId, "profiled");
+        setPipelineCompletedSteps((prev) => new Set(prev).add("profiled"));
 
+        // Step 4: matched
         setPipelineCurrent("matched");
+        await markStepRunning(runId, "matched");
         await getMatching(sid, jCode);
+        await markStepComplete(runId, "matched");
+        setPipelineCompletedSteps((prev) => new Set(prev).add("matched"));
 
+        // Step 5: reported
         setPipelineCurrent("reported");
+        await markStepRunning(runId, "reported");
         const report = await generateReport(sid, jCode);
+        await markStepComplete(runId, "reported");
+        setPipelineCompletedSteps((prev) => new Set(prev).add("reported"));
+        await markAnalysisComplete(runId);
         setReportId(report.report_id);
 
-        setPipelineCurrent("reported");
         setPipelineDone(true);
       } catch (err: unknown) {
-        const current = pipelineCurrent;
+        // Determine which step failed based on current pipeline state
+        const current = pipelineCurrent || "uploaded";
         setPipelineError(current);
         let detail = "未知错误";
         if (err instanceof APIError) {
@@ -229,6 +270,15 @@ export default function StudentMainPage() {
           detail = err.message;
         }
         setPipelineErrorDetail(detail);
+
+        // Mark failure in backend
+        if (runId) {
+          try {
+            await markStepFailed(runId, current, detail);
+          } catch {
+            // Ignore state update failures
+          }
+        }
       } finally {
         setPipelineRunning(false);
       }
@@ -243,9 +293,25 @@ export default function StudentMainPage() {
       ? PIPELINE_STEP_KEYS.indexOf(pipelineError as typeof PIPELINE_STEP_KEYS[number])
       : 0;
     const startKey = PIPELINE_STEP_KEYS[Math.max(0, errorIdx)];
+
+    // Reset backend state if we have a run ID
+    if (analysisRunId) {
+      resetAnalysisRun(analysisRunId).catch(() => {});
+    }
+
+    // Reset completed steps to those before the failed step
+    const completed = new Set<string>();
+    for (let i = 0; i < errorIdx; i++) {
+      completed.add(PIPELINE_STEP_KEYS[i]);
+    }
+    setPipelineCompletedSteps(completed);
     setPipelineCurrent(startKey);
+    setPipelineError(null);
+    setPipelineErrorDetail(undefined);
+
+    // Re-run pipeline from the failed step
     runPipeline(session.student_id, jobCode, fileIds);
-  }, [session, jobCode, uploadedFiles, pipelineError, runPipeline]);
+  }, [session, jobCode, uploadedFiles, pipelineError, analysisRunId, runPipeline]);
 
   const handleSend = async () => {
     const text = query.trim();
@@ -421,7 +487,8 @@ export default function StudentMainPage() {
     const steps = buildSteps(
       pipelineDone ? "reported" : pipelineCurrent,
       pipelineError,
-      pipelineErrorDetail
+      pipelineErrorDetail,
+      pipelineCompletedSteps,
     );
 
     return (
@@ -590,6 +657,8 @@ export default function StudentMainPage() {
                 setPipelineDone(false);
                 setPipelineError(null);
                 setPipelineErrorDetail(undefined);
+                setPipelineCompletedSteps(new Set());
+                setAnalysisRunId(null);
                 setReportId(null);
                 setUploadError("");
                 setUploadSuccess("");

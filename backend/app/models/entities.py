@@ -350,6 +350,19 @@ class ProfileVersion(TimestampMixin, Base):
     snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 
+class AnalysisRun(TimestampMixin, Base):
+    __tablename__ = "analysis_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, running, completed, failed
+    current_step: Mapped[str] = mapped_column(String(40), default="")  # uploaded, parsed, profiled, matched, reported
+    failed_step: Mapped[str] = mapped_column(String(40), default="")
+    error_detail: Mapped[str] = mapped_column(Text, default="")
+    step_results: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # step_results stores completion info: {"uploaded": true, "parsed": true, ...}
+
+
 class HistoryTitle(TimestampMixin, Base):
     __tablename__ = "history_titles"
 
