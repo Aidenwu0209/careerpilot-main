@@ -47,11 +47,12 @@ export default function StudentPathPage() {
         }
 
         const sess = await getStudentSession();
-        if (!sess.student_id || !sess.suggested_job_code) {
+        const jobCode = sess.resolved_job_code || sess.target_job_code || sess.suggested_job_code || "";
+        if (!sess.student_id || !jobCode) {
           setLoading(false);
           return;
         }
-        setPlan(await getPathPlan(sess.student_id, sess.suggested_job_code));
+        setPlan(await getPathPlan(sess.student_id, jobCode));
       } catch {
       } finally {
         setLoading(false);

@@ -36,8 +36,9 @@ export default function StudentMatchingPage() {
 
         // Load latest data
         const sess = await getStudentSession();
-        if (!sess.student_id || !sess.suggested_job_code) { setLoading(false); return; }
-        const matching = await getMatching(sess.student_id, sess.suggested_job_code);
+        const jobCode = sess.resolved_job_code || sess.target_job_code || sess.suggested_job_code || "";
+        if (!sess.student_id || !jobCode) { setLoading(false); return; }
+        const matching = await getMatching(sess.student_id, jobCode);
         setDimensions(Array.isArray(matching?.dimensions) ? matching.dimensions : []);
         setGapItems(Array.isArray(matching?.gap_items) ? matching.gap_items : []);
         setSummary(matching?.summary ?? "暂无数据");

@@ -31,6 +31,50 @@ from app.services.matching.recommendation import (
 router = APIRouter()
 
 
+def resolve_target_job(db: Session, student: Student) -> tuple[str, str]:
+    """Resolve the current target job with priority:
+    1. 手动确认 (student.target_job_code)
+    2. 已确认推荐岗位 (career_goal mapped to JobProfile)
+    3. 最近匹配岗位 (most recent MatchResult)
+    4. 默认回退 (empty)
+    Returns (job_code, job_title).
+    """
+    # 1. 手动确认
+    if student.target_job_code:
+        return student.target_job_code, student.target_job_title or student.target_job_code
+
+    # 2. 已确认推荐岗位 (career_goal mapped)
+    if student.career_goal:
+        jp = db.scalar(
+            select(JobProfile)
+            .where(func.lower(JobProfile.title).contains(student.career_goal.lower()))
+            .limit(1)
+        )
+        if jp:
+            return jp.job_code, jp.title
+
+    # 3. 最近匹配岗位
+    student_profile = db.scalar(
+        select(StudentProfile).where(StudentProfile.student_id == student.id)
+    )
+    if student_profile:
+        latest_match = db.scalar(
+            select(MatchResult)
+            .where(MatchResult.student_profile_id == student_profile.id)
+            .order_by(MatchResult.created_at.desc())
+            .limit(1)
+        )
+        if latest_match:
+            jp = db.scalar(
+                select(JobProfile).where(JobProfile.id == latest_match.job_profile_id).limit(1)
+            )
+            if jp:
+                return jp.job_code, jp.title
+
+    # 4. 默认回退
+    return "", ""
+
+
 @router.get("/me")
 def get_current_student(
     current_user: User = Depends(get_current_user),
@@ -62,6 +106,8 @@ def get_current_student(
             suggested_job_code = jp.job_code
             suggested_job_title = jp.title
 
+    resolved_code, resolved_title = resolve_target_job(db, student)
+
     return {
         "student_id": student.id,
         "user_id": current_user.id,
@@ -72,6 +118,8 @@ def get_current_student(
         "target_job_title": student.target_job_title or "",
         "suggested_job_code": suggested_job_code,
         "suggested_job_title": suggested_job_title,
+        "resolved_job_code": resolved_code,
+        "resolved_job_title": resolved_title,
     }
 
 

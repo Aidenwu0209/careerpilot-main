@@ -32,6 +32,8 @@ export type StudentSession = {
   target_job_title: string;
   suggested_job_code: string | null;
   suggested_job_title: string | null;
+  resolved_job_code: string;
+  resolved_job_title: string;
 };
 
 export class APIError extends Error {
