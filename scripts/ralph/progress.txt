@@ -15,6 +15,7 @@
 - CareerPathService.plan_path returns vertical_graph and transition_graph; both must be persisted to PathRecommendation.
 - Cross-entity references (e.g. CareerReport -> PathRecommendation) use nullable FK columns to avoid breaking old records; always check null before fetching linked data.
 - Report page should fetch graph data via getPathResult(path_recommendation_id) instead of duplicating graph structures in report content_json.
+- Target job resolution priority: 手动确认 (target_job_code) > 已确认推荐岗位 (career_goal→JobProfile) > 最近匹配岗位 (MatchResult) > 默认回退 (empty). Backend `resolve_target_job()` in students.py implements this; all pages should use `resolved_job_code` from GET /students/me.
 - Vertical graph timeline rendering: use `node.stage === "当前目标" || index === 0` to detect the target node for highlighting.
 - Path page must never fall back to plain-text list rendering (primaryPath/alternatePaths); always use graph views or show empty state.
 - Chat system must never inject fixed-length career planning templates; system prompts must be evidence-first and template-after.
@@ -135,4 +136,17 @@
   - dashboard page.tsx 同样优先使用 target_job_code 获取匹配和路径数据
   - test_demo_flow.py 和 test_matching.py 的失败均为既有问题（认证 fixture 和 5 维 vs 4 维断言）
   - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
+
+## 2026-04-13 22:00 - US-010
+- 统一了推荐页、匹配页、路径页和报告页的目标岗位口径
+- 更改的文件：backend/app/api/routers/students.py, backend/app/api/routers/reports.py, backend/app/schemas/report.py, frontend/lib/api.ts, frontend/app/student/path/page.tsx, frontend/app/student/matching/page.tsx
+- **未来迭代的学习：**
+  - 新增 `resolve_target_job(db, student)` 函数在 students.py 中，实现四级优先级解析：手动确认 > career_goal 映射 > 最近 MatchResult > 默认回退
+  - GET /students/me 现在额外返回 `resolved_job_code` 和 `resolved_job_title` 字段，前端各页面应优先使用
+  - ReportGenerateRequest 的 `job_code` 字段改为可选（默认空字符串），报告生成端点在 job_code 为空时自动调用 `resolve_target_job` 解析
+  - 路径页 (path/page.tsx) 之前只检查 `suggested_job_code`，现在改为 `resolved_job_code || target_job_code || suggested_job_code`
+  - 匹配页 (matching/page.tsx) 之前只检查 `suggested_job_code`，同样修复为三级回退
+  - 历史报告已通过 CareerReport.target_job_code 存储生成时的岗位，无需额外修改
+  - test_demo_flow.py 和 test_matching.py 的失败均为既有问题（认证 fixture 和 5 维 vs 4 维断言）
 ---
