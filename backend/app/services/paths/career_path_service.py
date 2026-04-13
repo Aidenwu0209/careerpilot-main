@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import JobProfile, PathRecommendation, StudentProfile
+from app.schemas.career_path import CareerPathResponse
 from app.services.paths.graph_query_service import GraphQueryService
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class CareerPathService:
     def __init__(self, graph_query_service: GraphQueryService) -> None:
         self.graph_query_service = graph_query_service
 
-    async def plan_path(self, db: Session, student_id: int, job_code: str) -> dict:
+    async def plan_path(self, db: Session, student_id: int, job_code: str) -> CareerPathResponse:
         try:
             student_profile = db.scalar(select(StudentProfile).where(StudentProfile.student_id == student_id))
             job_profile = db.scalar(select(JobProfile).where(JobProfile.job_code == job_code))
@@ -141,17 +142,17 @@ class CareerPathService:
             existing.recommendations_json = recommendations
             existing.rationale = rationale
             db.commit()
-            return {
-                "student_id": student_id,
-                "target_job_code": job_code,
-                "primary_path": primary_path,
-                "alternate_paths": alternate_paths,
-                "vertical_graph": vertical_graph,
-                "transition_graph": transition_graph,
-                "gaps": gaps,
-                "recommendations": recommendations,
-                "rationale": rationale,
-            }
+            return CareerPathResponse(
+                student_id=student_id,
+                target_job_code=job_code,
+                primary_path=primary_path,
+                alternate_paths=alternate_paths,
+                vertical_graph=vertical_graph,
+                transition_graph=transition_graph,
+                gaps=gaps,
+                recommendations=recommendations,
+                rationale=rationale,
+            )
         except ValueError as e:
             logger.error(f"ValueError in plan_path for student {student_id}, job {job_code}: {str(e)}")
             raise

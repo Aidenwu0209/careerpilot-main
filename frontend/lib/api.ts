@@ -6,6 +6,52 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhos
 export type StudentProfile = typeof demoStudentProfile;
 export type MatchingResult = typeof demoMatching;
 export type PathPlan = typeof demoPath;
+
+export type VerticalGraphNode = {
+  title: string;
+  description: string;
+  skills: string[];
+  level: number;
+  stage: string;
+};
+
+export type VerticalGraphEdge = {
+  from: string;
+  to: string;
+  relation: string;
+  description: string;
+};
+
+export type VerticalGraph = {
+  title: string;
+  description: string;
+  nodes: VerticalGraphNode[];
+  edges: VerticalGraphEdge[];
+  promotion_paths: string[][];
+  vertical_paths: Record<string, unknown>[];
+};
+
+export type TransitionPathItem = {
+  steps: string[];
+  relation: string;
+  description: string;
+  skill_bridge: string[];
+};
+
+export type TransitionRole = {
+  title: string;
+  description: string;
+  skills: string[];
+  paths: TransitionPathItem[];
+};
+
+export type TransitionGraph = {
+  target: string;
+  nodes: Record<string, unknown>[];
+  edges: Record<string, unknown>[];
+  role_paths: TransitionRole[];
+  clusters: Record<string, unknown>[];
+};
 export type SchedulerJobItem = {
   job_name: string;
   cron_expr: string;

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_container, get_current_user, get_db_session
 from app.models import PathRecommendation, Student, StudentProfile, User
+from app.schemas.career_path import CareerPathResponse
 from app.schemas.common import APIResponse
 from app.schemas.matching import MatchingRequest
 from app.services.bootstrap import ServiceContainer
@@ -54,13 +55,14 @@ def get_path_result(
     vertical_graph = path_result.vertical_graph_json if path_result.vertical_graph_json else {}
     transition_graph = path_result.transition_graph_json if path_result.transition_graph_json else {}
 
-    return APIResponse(data={
-        "primary_path": path_result.primary_path_json or [],
-        "alternate_paths": path_result.alternate_paths_json or [],
-        "vertical_graph": vertical_graph,
-        "transition_graph": transition_graph,
-        "gaps": path_result.gaps_json or [],
-        "recommendations": path_result.recommendations_json or [],
-        "rationale": path_result.rationale or "历史记录仅保留基础路径；重新生成可查看完整岗位图谱。",
-        "target_job_code": path_result.target_job_code,
-    })
+    response_data = CareerPathResponse(
+        primary_path=path_result.primary_path_json or [],
+        alternate_paths=path_result.alternate_paths_json or [],
+        vertical_graph=vertical_graph,
+        transition_graph=transition_graph,
+        gaps=path_result.gaps_json or [],
+        recommendations=path_result.recommendations_json or [],
+        rationale=path_result.rationale or "历史记录仅保留基础路径；重新生成可查看完整岗位图谱。",
+        target_job_code=path_result.target_job_code,
+    )
+    return APIResponse(data=response_data.model_dump(by_alias=True))
