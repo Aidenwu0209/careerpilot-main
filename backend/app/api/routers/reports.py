@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_container, get_current_user, get_db_session
-from app.models import User
+from app.models import Student, User
 from app.schemas.report import (
     ReportCheckRequest,
     ReportCheckResponse,
@@ -14,6 +15,7 @@ from app.schemas.report import (
     ReportSaveRequest,
 )
 from app.services.bootstrap import ServiceContainer
+from app.services.student import resolve_target_job
 
 router = APIRouter()
 
@@ -55,7 +57,19 @@ async def generate_report(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    result = await container.report_service.generate_report(db, payload.student_id, payload.job_code)
+    # Resolve target job using unified logic (ignores frontend-provided job_code)
+    student = db.scalar(select(Student).where(Student.id == payload.student_id))
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="学生不存在")
+
+    job_code, job_title = resolve_target_job(student, db)
+    if not job_code:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="无法确定目标岗位，请先完成岗位推荐或手动确认目标岗位",
+        )
+
+    result = await container.report_service.generate_report(db, payload.student_id, job_code)
     return ReportResponse(**result)
 
 

@@ -7,7 +7,7 @@ from app.schemas.common import ExportedFile
 
 class ReportGenerateRequest(BaseModel):
     student_id: int = Field(..., gt=0)
-    job_code: str = Field(..., min_length=1, max_length=100)
+    job_code: str | None = Field(None, min_length=1, max_length=100)
 
 
 class ReportContent(BaseModel):
