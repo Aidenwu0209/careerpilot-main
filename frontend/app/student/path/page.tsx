@@ -173,36 +173,164 @@ export default function StudentPathPage() {
           </SectionCard>
 
           <SectionCard title="换岗路径图谱">
-            <p style={{ color: "var(--subtle)", margin: "0 0 16px", lineHeight: 1.7 }}>
-              已关联 {transitionRoles.length || 0} 个相关岗位；每个岗位至少给出 2 条换岗路径，便于比较转岗成本和技能桥接点。
+            <p style={{ color: "var(--subtle)", margin: "0 0 20px", lineHeight: 1.7 }}>
+              以 <strong style={{ color: "var(--ink)" }}>{plan?.transition_graph?.target || "当前岗位"}</strong> 为中心，已关联{" "}
+              {transitionRoles.length || 0} 个相关岗位，每个岗位提供多条换岗路径及技能桥接点。
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
-              {(transitionRoles.length ? transitionRoles : []).map((role) => (
-                <article key={role.title} style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, background: "#fff", padding: 16 }}>
-                  <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>{role.title}</h3>
-                  <p style={{ margin: "0 0 12px", color: "var(--subtle)", fontSize: "0.8125rem", lineHeight: 1.6 }}>{role.description}</p>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {(role.paths ?? []).slice(0, 3).map((path) => (
-                      <div key={path.steps.join("-")} style={{ padding: 12, borderRadius: 8, background: "#f8fafc" }}>
-                        <strong style={{ display: "block", marginBottom: 6, fontSize: "0.875rem" }}>{path.steps.join(" → ")}</strong>
-                        <p style={{ margin: "0 0 8px", color: "var(--subtle)", fontSize: "0.8125rem", lineHeight: 1.6 }}>{path.description}</p>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {(path.skill_bridge ?? []).map((skill) => (
-                            <span key={skill} style={{ padding: "4px 8px", borderRadius: 8, background: "#fff4e5", color: "#8a4b00", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
+            {transitionRoles.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {transitionRoles.map((role, roleIdx) => {
+                  const isTargetRole = role.title === plan?.transition_graph?.target;
+                  return (
+                    <div
+                      key={role.title}
+                      style={{
+                        display: "flex",
+                        gap: 16,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      {/* Role node */}
+                      <div
+                        style={{
+                          width: 140,
+                          flexShrink: 0,
+                          padding: "12px 14px",
+                          borderRadius: 8,
+                          border: isTargetRole ? "2px solid #0f74da" : "1px solid rgba(0,0,0,0.08)",
+                          background: isTargetRole ? "#eef6ff" : "#fff",
+                          boxShadow: isTargetRole ? "0 2px 8px rgba(15,116,218,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
+                          textAlign: "center",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: "50%",
+                            background: isTargetRole ? "#0f74da" : "#f0f4f8",
+                            color: isTargetRole ? "#fff" : "#64748b",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            margin: "0 auto 8px",
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {roleIdx + 1}
+                        </div>
+                        <h3 style={{ margin: "0 0 4px", fontSize: "0.875rem", fontWeight: 700 }}>{role.title}</h3>
+                        <p style={{ margin: 0, color: "var(--subtle)", fontSize: "0.75rem", lineHeight: 1.4 }}>{role.description}</p>
+                        {(role.skills?.length ?? 0) > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "center", marginTop: 8 }}>
+                            {(role.skills ?? []).slice(0, 3).map((skill) => (
+                              <span
+                                key={skill}
+                                style={{
+                                  padding: "2px 6px",
+                                  borderRadius: 6,
+                                  background: isTargetRole ? "#dbeafe" : "#f0f4f8",
+                                  color: isTargetRole ? "#1d4ed8" : "#64748b",
+                                  fontSize: "0.6875rem",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Connector + paths */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                          <div style={{ width: 24, height: 2, background: isTargetRole ? "#0f74da" : "#dde5ed" }} />
+                          <span style={{ fontSize: "0.75rem", color: "var(--subtle)", fontWeight: 600 }}>
+                            {role.paths?.length || 0} 条换岗路径
+                          </span>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {(role.paths ?? []).slice(0, 3).map((path, pathIdx) => (
+                            <div
+                              key={path.steps.join("-")}
+                              style={{
+                                padding: 14,
+                                borderRadius: 8,
+                                background: "#f8fafc",
+                                border: "1px solid rgba(0,0,0,0.04)",
+                              }}
+                            >
+                              {/* Step flow */}
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                                {path.steps.map((step, stepIdx) => (
+                                  <span key={step} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span
+                                      style={{
+                                        padding: "3px 10px",
+                                        borderRadius: 6,
+                                        background: isTargetRole && stepIdx === 0 ? "#0f74da" : "#fff",
+                                        color: isTargetRole && stepIdx === 0 ? "#fff" : "var(--ink)",
+                                        fontSize: "0.8125rem",
+                                        fontWeight: 600,
+                                        border: isTargetRole && stepIdx === 0 ? "none" : "1px solid #e2e8f0",
+                                      }}
+                                    >
+                                      {step}
+                                    </span>
+                                    {stepIdx < path.steps.length - 1 && (
+                                      <span style={{ color: "#94a3b8", fontSize: "0.75rem" }}>→</span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+
+                              {/* Description */}
+                              <p style={{ margin: "0 0 8px", color: "var(--subtle)", fontSize: "0.8125rem", lineHeight: 1.6 }}>
+                                {path.description || `${path.steps[0]} 可通过补齐 ${path.steps[path.steps.length - 1]} 的核心技能完成转换。`}
+                              </p>
+
+                              {/* Skill bridge */}
+                              {(path.skill_bridge ?? []).length > 0 && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: "0.75rem", color: "#8a4b00", fontWeight: 600 }}>技能桥接：</span>
+                                  {(path.skill_bridge ?? []).map((skill) => (
+                                    <span
+                                      key={skill}
+                                      style={{
+                                        padding: "3px 8px",
+                                        borderRadius: 6,
+                                        background: "#fff4e5",
+                                        color: "#8a4b00",
+                                        fontSize: "0.75rem",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {skill}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", padding: "32px 0", color: "#888" }}>
+                <p style={{ margin: 0 }}>暂无换岗路径数据</p>
+                {alternatePaths.length > 0 && (
+                  <ul className="plain-list" style={{ textAlign: "left", maxWidth: 480, margin: "12px auto 0" }}>
+                    {alternatePaths.map((path: string[]) => (
+                      <li key={path.join("-")}>{path.join(" → ")}</li>
                     ))}
-                  </div>
-                </article>
-              ))}
-            </div>
-            {transitionRoles.length === 0 && (
-              <ul className="plain-list">
-                {alternatePaths.map((path: string[]) => (
-                  <li key={path.join("-")}>{path.join(" → ")}</li>
-                ))}
-              </ul>
+                  </ul>
+                )}
+              </div>
             )}
           </SectionCard>
 

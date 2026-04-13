@@ -76,13 +76,26 @@ export const demoPath = {
     edges: [],
     clusters: [],
     role_paths: [
-      { title: "产品经理", description: "产品路线核心岗位", skills: ["需求分析", "项目管理"], paths: [
-        { steps: ["产品经理", "数据产品经理"], relation: "换岗", description: "补齐数据指标体系。", skill_bridge: ["SQL", "指标体系"] },
-        { steps: ["产品经理", "项目经理"], relation: "换岗", description: "强化项目推进。", skill_bridge: ["风险管理", "资源协调"] },
+      { title: "产品经理", description: "产品路线核心岗位，负责需求洞察与方案设计。", skills: ["需求分析", "项目管理"], paths: [
+        { steps: ["产品经理", "数据产品经理"], relation: "换岗", description: "补齐数据指标体系与数据驱动决策能力。", skill_bridge: ["SQL", "指标体系", "数据可视化"] },
+        { steps: ["产品经理", "项目经理"], relation: "换岗", description: "强化项目推进与资源协调能力。", skill_bridge: ["风险管理", "资源协调", "进度管控"] },
+        { steps: ["产品经理", "运营专家"], relation: "换岗", description: "结合产品思维与运营策略实现增长。", skill_bridge: ["用户运营", "数据分析", "增长策略"] },
       ] },
-      { title: "数据分析师", description: "数据类岗位", skills: ["SQL", "Python"], paths: [
-        { steps: ["数据分析师", "数据产品经理"], relation: "换岗", description: "强化产品文档。", skill_bridge: ["需求分析", "原型设计"] },
-        { steps: ["数据分析师", "产品经理"], relation: "换岗", description: "强化业务洞察。", skill_bridge: ["用户研究", "项目推进"] },
+      { title: "数据分析师", description: "数据类岗位，负责数据挖掘与洞察输出。", skills: ["SQL", "Python"], paths: [
+        { steps: ["数据分析师", "数据产品经理"], relation: "换岗", description: "补充产品文档与需求分析能力。", skill_bridge: ["需求分析", "原型设计", "用户研究"] },
+        { steps: ["数据分析师", "产品经理"], relation: "换岗", description: "强化业务洞察与跨团队沟通。", skill_bridge: ["用户研究", "项目推进", "商业分析"] },
+      ] },
+      { title: "数据产品经理", description: "数据与产品交叉岗位。", skills: ["数据可视化", "需求分析"], paths: [
+        { steps: ["数据产品经理", "产品经理"], relation: "换岗", description: "拓展通用产品规划能力。", skill_bridge: ["项目管理", "用户研究", "商业分析"] },
+        { steps: ["数据产品经理", "数据分析师"], relation: "换岗", description: "深入数据建模与分析能力。", skill_bridge: ["Python", "机器学习", "统计学"] },
+      ] },
+      { title: "项目经理", description: "项目管理岗位，负责推进交付。", skills: ["风险管理", "资源协调"], paths: [
+        { steps: ["项目经理", "产品经理"], relation: "换岗", description: "转向需求定义与方案设计。", skill_bridge: ["需求分析", "原型设计", "用户研究"] },
+        { steps: ["项目经理", "运营专家"], relation: "换岗", description: "结合项目经验与运营增长。", skill_bridge: ["用户运营", "数据分析", "活动策划"] },
+      ] },
+      { title: "运营专家", description: "运营类岗位，负责用户增长与留存。", skills: ["用户运营", "增长策略"], paths: [
+        { steps: ["运营专家", "产品经理"], relation: "换岗", description: "从运营视角切入产品规划。", skill_bridge: ["需求分析", "数据驱动", "用户研究"] },
+        { steps: ["运营专家", "数据分析师"], relation: "换岗", description: "强化数据建模与洞察输出。", skill_bridge: ["SQL", "Python", "数据可视化"] },
       ] },
     ],
   },
