@@ -106,8 +106,8 @@ class MockLLMProvider(BaseLLMProvider):
             "goals": {
                 "target_job": job_title,
                 "industry_trend": "数字化岗位需求持续增长，企业更加重视复合能力与真实项目经验。",
-                "primary_path": path_result["primary_path"],
-                "alternate_paths": path_result["alternate_paths"],
+                "primary_path": path_result.primary_path,
+                "alternate_paths": path_result.alternate_paths,
             },
             "action_plan": {
                 "short_term": [
@@ -127,7 +127,7 @@ class MockLLMProvider(BaseLLMProvider):
             "evidence": {
                 "job_profile": payload["job_profile"],
                 "student_profile": payload["student_profile"],
-                "path_reasoning": path_result["rationale"],
+                "path_reasoning": path_result.rationale,
             },
         }
         markdown = (
@@ -137,8 +137,8 @@ class MockLLMProvider(BaseLLMProvider):
             f"## 二、职业目标与路径规划\n"
             f"- 目标岗位：{job_title}\n"
             f"- 行业趋势：{content['goals']['industry_trend']}\n"
-            f"- 主路径：{' -> '.join(path_result['primary_path'])}\n"
-            f"- 备选路径：{'; '.join(' -> '.join(path) for path in path_result['alternate_paths'])}\n\n"
+            f"- 主路径：{' -> '.join(path_result.primary_path)}\n"
+            f"- 备选路径：{'; '.join(' -> '.join(path) for path in path_result.alternate_paths)}\n\n"
             f"## 三、行动计划与成果展示\n"
             f"- 短期：{'；'.join(content['action_plan']['short_term'])}\n"
             f"- 中期：{'；'.join(content['action_plan']['mid_term'])}\n"
