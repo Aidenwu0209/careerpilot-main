@@ -46,10 +46,15 @@ class StudentProfileService:
         student_id: int,
         uploaded_file_ids: list[int],
         manual_input: Optional[ManualStudentInput],
+        mode: str = "current_resume",
     ) -> dict:
         student = db.get(Student, student_id)
         if not student:
             raise ValueError("学生不存在")
+
+        if not uploaded_file_ids and not manual_input:
+            raise ValueError("uploaded_file_ids 和 manual_input 不能同时为空")
+
         merged = {
             "major": "",  # 初始为空，优先使用OCR解析的专业
             "skills": [],
@@ -61,12 +66,19 @@ class StudentProfileService:
             "source_summary": "",
         }
         evidence_items: list[dict] = []
-        uploaded_files = [db.get(UploadedFile, uploaded_file_id) for uploaded_file_id in uploaded_file_ids]
-        uploaded_files = [file for file in uploaded_files if file]
-        resume_files = [file for file in uploaded_files if file.file_type == "resume"]
-        if len(resume_files) > 1:
-            latest_resume = sorted(resume_files, key=lambda file: (file.created_at, file.id), reverse=True)[0]
-            uploaded_files = [file for file in uploaded_files if file.file_type != "resume"] + [latest_resume]
+        uploaded_files = [db.get(UploadedFile, fid) for fid in uploaded_file_ids]
+        uploaded_files = [f for f in uploaded_files if f]
+
+        # Apply mode filtering: only use explicitly provided files
+        if uploaded_files and mode == "current_resume":
+            resume_files = [f for f in uploaded_files if f.file_type == "resume"]
+            if resume_files:
+                latest_resume = sorted(resume_files, key=lambda f: (f.created_at, f.id), reverse=True)[0]
+                uploaded_files = [latest_resume]
+            else:
+                # No resume-type files: use only the first file as "current"
+                uploaded_files = [uploaded_files[0]]
+        # mode == "merged_materials": use all provided files
 
         for uploaded in uploaded_files:
             try:
@@ -172,14 +184,18 @@ class StudentProfileService:
             "competitiveness_score": profile.competitiveness_score,
             "willingness": profile.willingness_json,
             "evidence": combined_evidence,
+            "uploaded_file_ids": uploaded_file_ids,
+            "mode": mode,
         }
-        db.add(ProfileVersion(
+        pv = ProfileVersion(
             student_id=student_id,
             version_no=next_version,
             source_files=merged["source_summary"],
             snapshot_json=snapshot,
-        ))
+        )
+        db.add(pv)
         db.commit()
+        db.refresh(pv)
 
         return {
             "student_id": student_id,
@@ -191,6 +207,7 @@ class StudentProfileService:
             "competitiveness_score": profile.competitiveness_score,
             "willingness": profile.willingness_json,
             "evidence": combined_evidence,
+            "profile_version_id": pv.id,
         }
 
     def get_profile(self, db: Session, student_id: int) -> Optional[dict]:

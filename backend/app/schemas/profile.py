@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,7 +31,8 @@ class OCRParseResponse(BaseModel):
 
 class StudentProfileGenerateRequest(BaseModel):
     student_id: int = Field(..., gt=0)
-    uploaded_file_ids: list[int] = Field(default_factory=list)
+    uploaded_file_ids: list[int] = Field(...)
+    mode: Literal["current_resume", "merged_materials"] = "current_resume"
     manual_input: Optional[ManualStudentInput] = None
 
 
@@ -45,3 +46,4 @@ class StudentProfileOut(BaseModel):
     competitiveness_score: float
     willingness: dict[str, Any]
     evidence: list[EvidenceItem]
+    profile_version_id: Optional[int] = None

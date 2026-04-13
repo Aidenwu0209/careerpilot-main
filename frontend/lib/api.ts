@@ -292,10 +292,10 @@ export async function parseOCR(uploadedFileId: number, documentType: string = "r
   });
 }
 
-export async function generateStudentProfile(studentId: number, uploadedFileIds: number[]): Promise<StudentProfile> {
+export async function generateStudentProfile(studentId: number, uploadedFileIds: number[], mode: "current_resume" | "merged_materials" = "current_resume"): Promise<StudentProfile> {
   return request<StudentProfile>("/student-profiles/generate", {
     method: "POST",
-    body: JSON.stringify({ student_id: studentId, uploaded_file_ids: uploadedFileIds, manual_input: null })
+    body: JSON.stringify({ student_id: studentId, uploaded_file_ids: uploadedFileIds, mode, manual_input: null })
   });
 }
 

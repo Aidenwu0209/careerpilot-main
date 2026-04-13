@@ -20,12 +20,16 @@ async def generate_student_profile(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    result = await container.student_profile_service.generate_profile(
-        db,
-        student_id=payload.student_id,
-        uploaded_file_ids=payload.uploaded_file_ids,
-        manual_input=payload.manual_input,
-    )
+    try:
+        result = await container.student_profile_service.generate_profile(
+            db,
+            student_id=payload.student_id,
+            uploaded_file_ids=payload.uploaded_file_ids,
+            manual_input=payload.manual_input,
+            mode=payload.mode,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return StudentProfileOut(**result)
 
 

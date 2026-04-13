@@ -20,7 +20,8 @@ export const demoStudentProfile = {
   evidence: [
     { source: "resume.pdf", excerpt: "实习经历：某互联网公司产品实习生，负责需求分析和原型设计", confidence: 0.92 },
     { source: "手动录入", excerpt: "补充项目：校园电商平台产品设计方案", confidence: 0.95 }
-  ]
+  ],
+  profile_version_id: null as number | null
 };
 
 export const demoMatching = {
