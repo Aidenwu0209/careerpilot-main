@@ -11,6 +11,46 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+# --- OCR Error Classification ---
+
+class OCRError(Exception):
+    """Base exception for OCR errors with structured metadata."""
+
+    def __init__(self, error_code: str, message: str, retryable: bool = False) -> None:
+        self.error_code = error_code
+        self.message = message
+        self.retryable = retryable
+        super().__init__(message)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error_code": self.error_code,
+            "message": self.message,
+            "retryable": self.retryable,
+        }
+
+
+class OCRParseError(OCRError):
+    """File cannot be parsed (empty text, corrupt format, unsupported type)."""
+
+    def __init__(self, message: str = "文件无法解析，请上传支持格式的文件") -> None:
+        super().__init__(error_code="parse_error", message=message, retryable=False)
+
+
+class OCRServiceError(OCRError):
+    """Third-party OCR service returned an error (5xx, etc.)."""
+
+    def __init__(self, message: str = "OCR 服务异常，请稍后重试") -> None:
+        super().__init__(error_code="service_error", message=message, retryable=True)
+
+
+class OCRNetworkError(OCRError):
+    """Network or timeout error contacting OCR service."""
+
+    def __init__(self, message: str = "网络连接超时，请检查网络后重试") -> None:
+        super().__init__(error_code="network_error", message=message, retryable=True)
+
+
 class BaseOCRProvider(ABC):
     @abstractmethod
     async def parse_document(
@@ -195,16 +235,12 @@ class MockOCRProvider(BaseOCRProvider):
         if not text:
             lowered = file_name.lower()
             if lowered.endswith((".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg")):
-                return _empty_ocr_result(
-                    document_type,
+                raise OCRParseError(
                     "未能从文件中提取可用文字，请使用真实 OCR 或上传可复制文本的 PDF/DOCX。",
                 )
             text = content_bytes.decode("utf-8", errors="ignore")
         if not text.strip():
-            return _empty_ocr_result(
-                document_type,
-                "未能从文件中提取可用文字。",
-            )
+            raise OCRParseError("未能从文件中提取可用文字，文件内容为空。")
         text = _normalize_ocr_text(text)
         skills = _extract_keywords(text, self.SKILL_CANDIDATES)
         certificates = _extract_keywords(text, self.CERTIFICATE_CANDIDATES)
@@ -272,7 +308,12 @@ class PaddleOCRProvider(BaseOCRProvider):
                 "PaddleOCR HTTP error: file=%s status=%d body=%s",
                 file_name, e.response.status_code, e.response.text[:500],
             )
-            raise ValueError(f"PaddleOCR API returned {e.response.status_code}: {e.response.text[:200]}") from e
+            raise OCRServiceError(
+                f"OCR 服务异常 (HTTP {e.response.status_code})，请稍后重试",
+            ) from e
+        except httpx.TimeoutException as e:
+            logger.error("PaddleOCR timeout: file=%s url=%s", file_name, self.service_url)
+            raise OCRNetworkError("OCR 服务响应超时，请检查网络后重试") from e
         except httpx.RequestError as e:
             logger.error("PaddleOCR connection error: file=%s url=%s err=%s", file_name, self.service_url, e)
-            raise ValueError(f"PaddleOCR connection failed to {self.service_url}: {e}") from e
+            raise OCRNetworkError(f"无法连接到 OCR 服务，请检查网络后重试") from e

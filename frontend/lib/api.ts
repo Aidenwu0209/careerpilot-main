@@ -40,7 +40,9 @@ export class APIError extends Error {
   constructor(
     public statusCode: number,
     message: string,
-    public isNetworkError: boolean = false
+    public isNetworkError: boolean = false,
+    public errorCode?: string,
+    public retryable?: boolean,
   ) {
     super(message);
     this.name = "APIError";
@@ -72,13 +74,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     if (!response.ok) {
       let detail = `请求失败 (${response.status})`;
+      let errorCode: string | undefined;
+      let retryable: boolean | undefined;
       try {
         const body = await response.json();
-        if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-        else if (body.message) detail = body.message;
+        if (body.detail) {
+          if (typeof body.detail === "object" && body.detail !== null) {
+            detail = body.detail.message || JSON.stringify(body.detail);
+            errorCode = body.detail.error_code;
+            retryable = body.detail.retryable;
+          } else {
+            detail = body.detail;
+          }
+        } else if (body.message) {
+          detail = body.message;
+        }
+        if (body.error_code && !errorCode) errorCode = body.error_code;
+        if (body.retryable !== undefined && retryable === undefined) retryable = body.retryable;
       } catch {}
       console.error(`[API Error] ${path}:`, detail);
-      throw new APIError(response.status, detail, false);
+      throw new APIError(response.status, detail, false, errorCode, retryable);
     }
 
     const data = await response.json();

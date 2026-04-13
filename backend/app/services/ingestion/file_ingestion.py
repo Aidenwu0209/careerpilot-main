@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.integrations.ocr.providers import BaseOCRProvider
+from app.integrations.ocr.providers import BaseOCRProvider, OCRError
 from app.integrations.storage.providers import BaseStorageProvider
 from app.models import Certificate, Resume, Student, Transcript, UploadedFile
 
@@ -74,6 +74,9 @@ class FileIngestionService:
                     certificate.name = result["structured_json"].get("certificates", [uploaded.file_name])[0]
             db.commit()
             return result
+        except OCRError:
+            # Propagate classified OCR errors as-is
+            raise
         except ValueError as e:
             logger.error(f"ValueError while parsing file {uploaded_file_id}: {str(e)}")
             raise
