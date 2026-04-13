@@ -174,6 +174,8 @@ class StudentProfile(TimestampMixin, Base):
     source_summary: Mapped[str] = mapped_column(Text, default="")
     skills_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     certificates_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    projects_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    internships_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     capability_scores: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     completeness_score: Mapped[float] = mapped_column(Float, default=0.0)
     competitiveness_score: Mapped[float] = mapped_column(Float, default=0.0)
@@ -347,7 +349,10 @@ class ProfileVersion(TimestampMixin, Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
     version_no: Mapped[int] = mapped_column(Integer, default=1)
     source_files: Mapped[str] = mapped_column(Text, default="")
+    uploaded_file_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    file_summaries_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    evidence_snapshot_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
 
 
 class AnalysisRun(TimestampMixin, Base):

@@ -3,6 +3,8 @@ export const demoStudentProfile = {
   source_summary: "简历、证书、手动录入",
   skills: ["需求分析", "原型设计", "SQL", "Python", "Excel", "PPT", "数据可视化", "沟通协调"],
   certificates: ["英语六级", "PMP 项目管理认证"],
+  projects: ["校园电商平台产品设计方案"],
+  internships: ["某互联网公司产品实习生"],
   capability_scores: {
     专业技能: 82,
     创新能力: 79,

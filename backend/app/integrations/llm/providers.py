@@ -84,6 +84,8 @@ class MockLLMProvider(BaseLLMProvider):
             "source_summary": payload.get("source_summary", ""),
             "skills": skills,
             "certificates": certificates,
+            "projects": payload.get("projects", []),
+            "internships": payload.get("internships", []),
             "capability_scores": capability_scores,
             "completeness_score": completeness_score,
             "competitiveness_score": min(100.0, competitiveness_score),

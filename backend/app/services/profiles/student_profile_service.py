@@ -66,6 +66,7 @@ class StudentProfileService:
             "source_summary": "",
         }
         evidence_items: list[dict] = []
+        file_summaries: list[dict] = []
         uploaded_files = [db.get(UploadedFile, fid) for fid in uploaded_file_ids]
         uploaded_files = [f for f in uploaded_files if f]
 
@@ -108,6 +109,15 @@ class StudentProfileService:
                         "confidence": 0.9,
                     })
                 merged["source_summary"] += f"{uploaded.file_name}；"
+                file_summaries.append({
+                    "file_id": uploaded.id,
+                    "file_name": uploaded.file_name,
+                    "file_type": uploaded.file_type,
+                    "summary": f"{uploaded.file_name}（{uploaded.file_type}），"
+                               f"提取技能 {len(structured.get('skills', []))} 项，"
+                               f"项目 {len(structured.get('projects', []))} 个，"
+                               f"实习 {len(structured.get('internships', []))} 段",
+                })
                 for skill in structured.get("skills", []):
                     evidence_items.append({"source": uploaded.file_name, "excerpt": f"OCR 提取技能：{skill}", "confidence": 0.9})
             except Exception as e:
@@ -148,6 +158,8 @@ class StudentProfileService:
         profile.source_summary = llm_result["source_summary"]
         profile.skills_json = llm_result["skills"]
         profile.certificates_json = llm_result["certificates"]
+        profile.projects_json = llm_result.get("projects", [])
+        profile.internships_json = llm_result.get("internships", [])
         profile.capability_scores = llm_result["capability_scores"]
         profile.completeness_score = llm_result["completeness_score"]
         profile.competitiveness_score = llm_result["competitiveness_score"]
@@ -179,11 +191,12 @@ class StudentProfileService:
             "source_summary": profile.source_summary,
             "skills": profile.skills_json,
             "certificates": profile.certificates_json,
+            "projects": profile.projects_json,
+            "internships": profile.internships_json,
             "capability_scores": profile.capability_scores,
             "completeness_score": profile.completeness_score,
             "competitiveness_score": profile.competitiveness_score,
             "willingness": profile.willingness_json,
-            "evidence": combined_evidence,
             "uploaded_file_ids": uploaded_file_ids,
             "mode": mode,
         }
@@ -191,7 +204,10 @@ class StudentProfileService:
             student_id=student_id,
             version_no=next_version,
             source_files=merged["source_summary"],
+            uploaded_file_ids=uploaded_file_ids,
+            file_summaries_json=file_summaries,
             snapshot_json=snapshot,
+            evidence_snapshot_json=combined_evidence,
         )
         db.add(pv)
         db.commit()
@@ -202,6 +218,8 @@ class StudentProfileService:
             "source_summary": profile.source_summary,
             "skills": profile.skills_json,
             "certificates": profile.certificates_json,
+            "projects": profile.projects_json,
+            "internships": profile.internships_json,
             "capability_scores": profile.capability_scores,
             "completeness_score": profile.completeness_score,
             "competitiveness_score": profile.competitiveness_score,
@@ -222,6 +240,8 @@ class StudentProfileService:
             "source_summary": profile.source_summary,
             "skills": profile.skills_json,
             "certificates": profile.certificates_json,
+            "projects": profile.projects_json,
+            "internships": profile.internships_json,
             "capability_scores": profile.capability_scores,
             "completeness_score": profile.completeness_score,
             "competitiveness_score": profile.competitiveness_score,

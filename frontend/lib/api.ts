@@ -302,8 +302,11 @@ export async function generateStudentProfile(studentId: number, uploadedFileIds:
 export type ProfileVersionItem = {
   id: number;
   version_no: number;
+  uploaded_file_ids: number[];
+  file_summaries: { file_id: number; file_name: string; file_type: string; summary: string }[];
   source_files: string;
   snapshot: StudentProfile;
+  evidence_snapshot: { source: string; excerpt: string; confidence: number }[];
   created_at: string;
 };
 
