@@ -1,6 +1,10 @@
 ## Codebase Patterns
+- Report generation must check evidence sufficiency before calling LLM; return `insufficient_data` status instead of pseudo-complete reports.
+- MockLLMProvider must never include hardcoded generic fallback text (e.g. industry_trend, generic action plans); derive all content from real data or leave empty.
 - Backend uses SQLAlchemy ORM plus create_all; new JSON columns need defaults for backward compatibility.
 - Frontend uses Next.js App Router and frontend/lib/api.ts as the single API access layer.
+- /students/me is the source of truth for the current target job; writes go through PUT /students/me/target-job.
+- Student model stores target_job_code and target_job_title separately from career_goal; frontend reads target_job_code first, then falls back to suggested_job_code.
 - /students/me is the source of truth for the current target job, and writes go through /students/me/target-job.
 - Path results, history replay, and report pages must share one graph structure instead of building separate view models.
 - Report generation must check evidence sufficiency first and return insufficient_data when resume evidence is missing.
@@ -13,6 +17,8 @@
 - Report page should fetch graph data via getPathResult(path_recommendation_id) instead of duplicating graph structures in report content_json.
 - Vertical graph timeline rendering: use `node.stage === "当前目标" || index === 0` to detect the target node for highlighting.
 - Path page must never fall back to plain-text list rendering (primaryPath/alternatePaths); always use graph views or show empty state.
+- Chat system must never inject fixed-length career planning templates; system prompts must be evidence-first and template-after.
+- _build_user_context should include all available user data: student info, profile, match results (with dimensions), path recommendations, and OCR content.
 ---
 
 ## 2026-04-13 16:10 - US-001
@@ -86,5 +92,47 @@
   - 报告 markdown 输出现在包含独立的"评分维度"和"差距分析"小节，直接展示各维度分数和真实差距项
   - evidence 部分新增 resume_evidence 字段，保留原始简历证据供追溯
   - test_matching.py 中 test_four_dimension_matching 断言 dimensions 数量为 4，但实际已有 5 个维度（含 OCR 项目/意向加权），属于既有问题
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
+
+## 2026-04-13 19:30 - US-007
+- 实现了报告生成证据优先、模板后置机制
+- 更改的文件：backend/app/services/reports/report_service.py, backend/app/integrations/llm/providers.py
+- **未来迭代的学习：**
+  - report_service.py 新增 `_check_evidence_sufficiency` 方法，在调用 LLM 前检查 OCR raw_text 和 match_result.dimensions 是否存在
+  - 证据不足时返回 `insufficient_data` 状态的报告，markdown 内容包含明确的缺失证据说明，不调用 LLM 生成伪完整报告
+  - MockLLMProvider 移除了硬编码的 `industry_trend`（"数字化岗位需求持续增长..."），改为从 path_result 获取，无数据则不显示
+  - MockLLMProvider 移除了 short_term/mid_term 的通用回退文本（"围绕目标岗位补齐..."），没有真实 gap_items 时列表为空
+  - MockLLMProvider 的 metrics 从硬编码改为根据 gap_items/path_recs 动态派生
+  - 前端 ReportDraft 类型已有 status 字段，insufficient_data 状态会通过 markdown 内容直接展示警告
+  - test_four_dimension_matching 失败是既有问题（5 维 vs 断言 4 维），非本次变更引入
+---
+---
+
+## 2026-04-13 20:30 - US-008
+- 让对话输出遵守证据优先、模板后置原则
+- 更改的文件：backend/app/api/routers/chat.py, backend/app/integrations/llm/providers.py
+- **未来迭代的学习：**
+  - MockLLMProvider._chat 之前在用户消息包含"技能""职业"等关键词时返回固定六段式职业规划范文（约 800 字），现在改为根据 system_prompt 中是否有用户上下文数据来决定回复策略
+  - chat.py 的 BASE_SYSTEM_PROMPT 注入了固定六段式报告格式要求（综合概述、能力分析、优势与不足、职业方向建议、行动建议、总结），已移除
+  - _build_user_context 新增了 MatchResult 和 PathRecommendation 的数据读取：最新匹配结果（总分、差距项、建议、各维度评分）和最新路径建议（目标岗位、差距项、建议）
+  - chat 端点现在区分两种情况：有数据时使用证据优先 system_prompt，无数据时引导用户先上传简历完成分析
+  - MatchResult 查询需要 profile.id，因此放在 profile 块内部；PathRecommendation 查询只需 student.id，放在 profile 块外部
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
+
+## 2026-04-13 21:00 - US-009
+- 实现了用户手动确认目标岗位的后端持久化和前端调用
+- 更改的文件：backend/app/models/entities.py, backend/app/api/routers/students.py, frontend/lib/api.ts, frontend/app/student/page.tsx, frontend/app/student/dashboard/page.tsx
+- **未来迭代的学习：**
+  - Student 模型新增 target_job_code (String(80)) 和 target_job_title (String(120)) 两列，默认值为空字符串，与 career_goal 分离存储
+  - 新增 PUT /students/me/target-job 端点，接受 { job_code, job_title } body，更新 Student 记录
+  - GET /students/me 现在额外返回 target_job_code 和 target_job_title 字段
+  - 前端 StudentSession 类型新增 target_job_code 和 target_job_title 字段
+  - 新增 updateTargetJob API 函数，调用 PUT /students/me/target-job
+  - page.tsx 的 handleJobSelect 现在选择岗位后立即调用 updateTargetJob 持久化（fire-and-forget）
+  - page.tsx 加载 session 时优先使用 target_job_code，其次才用 suggested_job_code
+  - dashboard page.tsx 同样优先使用 target_job_code 获取匹配和路径数据
+  - test_demo_flow.py 和 test_matching.py 的失败均为既有问题（认证 fixture 和 5 维 vs 4 维断言）
   - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
 ---
