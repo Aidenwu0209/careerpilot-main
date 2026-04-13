@@ -28,6 +28,8 @@ export type StudentSession = {
   major: string;
   grade: string;
   career_goal: string;
+  target_job_code: string;
+  target_job_title: string;
   suggested_job_code: string | null;
   suggested_job_title: string | null;
 };
@@ -96,6 +98,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getStudentSession(): Promise<StudentSession> {
   return request<StudentSession>("/students/me");
+}
+
+export async function updateTargetJob(jobCode: string, jobTitle: string): Promise<{ ok: boolean; target_job_code: string; target_job_title: string }> {
+  return request("/students/me/target-job", {
+    method: "PUT",
+    body: JSON.stringify({ job_code: jobCode, job_title: jobTitle }),
+  });
 }
 
 export async function getStudentProfile(studentId: number): Promise<StudentProfile> {

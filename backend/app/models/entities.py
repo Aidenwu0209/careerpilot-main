@@ -37,6 +37,8 @@ class Student(TimestampMixin, Base):
     major: Mapped[str] = mapped_column(String(100), default="")
     grade: Mapped[str] = mapped_column(String(20), default="")
     career_goal: Mapped[str] = mapped_column(String(200), default="")
+    target_job_code: Mapped[str] = mapped_column(String(80), default="")
+    target_job_title: Mapped[str] = mapped_column(String(120), default="")
     learning_preferences: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     user: Mapped["User"] = relationship()
 

@@ -44,6 +44,8 @@ def get_current_student(
             "major": "",
             "grade": "",
             "career_goal": "",
+            "target_job_code": "",
+            "target_job_title": "",
             "suggested_job_code": None,
             "suggested_job_title": None,
         }
@@ -66,9 +68,32 @@ def get_current_student(
         "major": student.major,
         "grade": student.grade,
         "career_goal": student.career_goal,
+        "target_job_code": student.target_job_code or "",
+        "target_job_title": student.target_job_title or "",
         "suggested_job_code": suggested_job_code,
         "suggested_job_title": suggested_job_title,
     }
+
+
+class TargetJobRequest(BaseModel):
+    job_code: str = Field(..., min_length=1, max_length=80)
+    job_title: str = Field(..., min_length=1, max_length=120)
+
+
+@router.put("/me/target-job")
+def update_target_job(
+    payload: TargetJobRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        student = Student(user_id=current_user.id)
+        db.add(student)
+    student.target_job_code = payload.job_code
+    student.target_job_title = payload.job_title
+    db.commit()
+    return {"ok": True, "target_job_code": payload.job_code, "target_job_title": payload.job_title}
 
 
 @router.get("/me/recommended-jobs")

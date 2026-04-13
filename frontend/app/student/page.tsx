@@ -16,6 +16,7 @@ import {
   getMatching,
   generateReport,
   getGreeting,
+  updateTargetJob,
   type UploadedFileInfo,
   type StudentSession,
   APIError,
@@ -154,7 +155,10 @@ export default function StudentMainPage() {
     getStudentSession()
       .then((s) => {
         setSession(s);
-        if (s.suggested_job_code) {
+        if (s.target_job_code) {
+          setJobCode(s.target_job_code);
+          setJobTitle(s.target_job_title || "");
+        } else if (s.suggested_job_code) {
           setJobCode(s.suggested_job_code);
           setJobTitle(s.suggested_job_title || "");
         }
@@ -373,6 +377,7 @@ export default function StudentMainPage() {
   const handleJobSelect = (code: string, title: string) => {
     setJobCode(code);
     setJobTitle(title);
+    updateTargetJob(code, title).catch(() => {});
   };
 
   const fileTypeLabel: Record<string, string> = {
@@ -592,7 +597,10 @@ export default function StudentMainPage() {
                 getStudentSession()
                   .then((s) => {
                     setSession(s);
-                    if (s.suggested_job_code) {
+                    if (s.target_job_code) {
+                      setJobCode(s.target_job_code);
+                      setJobTitle(s.target_job_title || "");
+                    } else if (s.suggested_job_code) {
                       setJobCode(s.suggested_job_code);
                       setJobTitle(s.suggested_job_title || "");
                     }
