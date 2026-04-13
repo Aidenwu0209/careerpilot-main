@@ -399,12 +399,12 @@ export async function listFiles(): Promise<UploadedFileInfo[]> {
   return res.data ?? [];
 }
 
-export async function uploadFile(file: File, ownerId: number, fileType: string): Promise<{ id: number; file_name: string; url: string }> {
+export async function uploadFile(file: File, ownerId: number, fileType: string): Promise<{ id: number; file_name: string; file_type: string; created_at: string | null; url: string }> {
   const form = new FormData();
   form.append("upload", file);
   form.append("owner_id", String(ownerId));
   form.append("file_type", fileType);
-  const res = await request<{ data: { id: number; file_name: string; url: string } }>("/files/upload", {
+  const res = await request<{ data: { id: number; file_name: string; file_type: string; created_at: string | null; url: string } }>("/files/upload", {
     method: "POST",
     body: form,
   });
