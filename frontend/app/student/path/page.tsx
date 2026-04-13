@@ -61,11 +61,6 @@ export default function StudentPathPage() {
 
   const verticalNodes = (plan?.vertical_graph?.nodes ?? []) as VerticalNode[];
   const transitionRoles = (plan?.transition_graph?.role_paths ?? []) as TransitionRole[];
-  const primaryPath = plan?.primary_path ?? [];
-  const alternatePaths = plan?.alternate_paths ?? [];
-  const displayedVerticalNodes: VerticalNode[] = verticalNodes.length
-    ? verticalNodes
-    : primaryPath.map((title, index) => ({ title, level: index + 1 }));
 
   return (
     <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px" }}>
@@ -94,8 +89,9 @@ export default function StudentPathPage() {
             <p style={{ color: "var(--subtle)", margin: "0 0 20px", lineHeight: 1.7 }}>
               {plan?.vertical_graph?.description || plan?.rationale || "基于岗位图谱生成晋升链路。"}
             </p>
+            {verticalNodes.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
-              {displayedVerticalNodes.map((node, index, arr) => {
+              {verticalNodes.map((node, index, arr) => {
                 const isTarget = node.stage === "当前目标" || index === 0;
                 return (
                   <div key={`${node.title}-${index}`} style={{ display: "flex", gap: 16 }}>
@@ -158,6 +154,11 @@ export default function StudentPathPage() {
                 );
               })}
             </div>
+            ) : (
+              <div style={{ textAlign: "center", padding: "32px 0", color: "#888" }}>
+                <p style={{ margin: 0 }}>暂无垂直岗位图谱数据</p>
+              </div>
+            )}
             {(plan?.vertical_graph?.promotion_paths ?? []).length > 1 && (
               <div style={{ marginTop: 18 }}>
                 <h3 style={{ margin: "0 0 10px", fontSize: "0.9375rem" }}>其他晋升链路</h3>
@@ -323,13 +324,6 @@ export default function StudentPathPage() {
             ) : (
               <div style={{ textAlign: "center", padding: "32px 0", color: "#888" }}>
                 <p style={{ margin: 0 }}>暂无换岗路径数据</p>
-                {alternatePaths.length > 0 && (
-                  <ul className="plain-list" style={{ textAlign: "left", maxWidth: 480, margin: "12px auto 0" }}>
-                    {alternatePaths.map((path: string[]) => (
-                      <li key={path.join("-")}>{path.join(" → ")}</li>
-                    ))}
-                  </ul>
-                )}
               </div>
             )}
           </SectionCard>
