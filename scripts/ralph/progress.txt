@@ -20,6 +20,10 @@
 - Path page must never fall back to plain-text list rendering (primaryPath/alternatePaths); always use graph views or show empty state.
 - Chat system must never inject fixed-length career planning templates; system prompts must be evidence-first and template-after.
 - _build_user_context should include all available user data: student info, profile, match results (with dimensions), path recommendations, and OCR content.
+- Analysis pipeline state is tracked via AnalysisRun model (analysis_runs table) with four states: pending, running, completed, failed. Frontend calls backend step APIs (markStepRunning/markStepComplete/markStepFailed) as each pipeline step executes.
+- Pipeline buildSteps() must use "running" status for the current step, not "done"; completed steps are tracked separately via a Set<string> passed as completedKeys parameter.
+- Valid pipeline step keys: uploaded, parsed, profiled, matched, reported. These are defined in PIPELINE_STEP_KEYS constant in page.tsx and VALID_STEPS in analysis.py.
+- In async pipeline functions, track current step with a local variable instead of reading React state from closure — state updates are async and the closure captures stale values.
 ---
 
 ## 2026-04-13 16:10 - US-001
@@ -149,4 +153,41 @@
   - 匹配页 (matching/page.tsx) 之前只检查 `suggested_job_code`，同样修复为三级回退
   - 历史报告已通过 CareerReport.target_job_code 存储生成时的岗位，无需额外修改
   - test_demo_flow.py 和 test_matching.py 的失败均为既有问题（认证 fixture 和 5 维 vs 4 维断言）
+---
+
+## 2026-04-13 23:10 - US-011
+- 居中分析完成后的结果操作区，使其与主内容区宽度对齐
+- 更改的文件：frontend/app/student/page.tsx, frontend/app/globals.css
+- **未来迭代的学习：**
+  - renderPipelineResult() 从内联样式改为 CSS class（student-main__result-area），结果区 max-width: 720px 与 student-main__input-wrapper 一致
+  - PipelineProgress 组件外包了 student-main__pipeline-wrap 容器，同样居中对齐
+  - 按钮使用 justify-content: center 居中，flex-wrap: wrap 在移动端自动换行
+  - 各按钮颜色变体通过独立 class（--red, --purple, --teal, --green）管理，替代内联 style
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
+
+## 2026-04-13 23:30 - US-012
+- 实现了分析流水线的真实状态流转模型（pending → running → completed/failed）
+- 更改的文件：backend/app/models/entities.py, backend/app/models/__init__.py, backend/app/api/routers/analysis.py, backend/app/api/router.py, frontend/lib/api.ts, frontend/app/student/page.tsx
+- **未来迭代的学习：**
+  - 新增 AnalysisRun 模型（analysis_runs 表），包含 status（pending/running/completed/failed）、current_step、failed_step、error_detail、step_results 字段
+  - 新增 /analysis 路由组，包含 start、latest、{run_id}、step/{key}/running、step/{key}/complete、step/{key}/fail、complete、reset 端点
+  - 前端 buildSteps() 修复：当前步骤从 "done" 改为 "running" 状态，已完成的步骤通过 completedKeys Set 追踪
+  - runPipeline() 现在在每个步骤执行前后调用后端 API（startAnalysisRun → markStepRunning → 业务API → markStepComplete），实现真实状态流转
+  - 失败时调用 markStepFailed 标记失败步骤和错误详情，重试时调用 resetAnalysisRun 重置后端状态
+  - test_demo_flow.py（认证 fixture）和 test_matching.py（5 维 vs 4 维断言）的失败为既有问题
+---
+
+## 2026-04-14 00:15 - US-013
+- 实现了进度条四种可区分状态（待开始、进行中、已完成、失败）的视觉增强
+- 更改的文件：frontend/components/PipelineProgress.tsx, frontend/app/student/page.tsx
+- **未来迭代的学习：**
+  - PipelineProgress 组件重构为四种状态各有独立视觉标识：pending 使用空心圆圈+灰色 badge，running 使用蓝色 spinner+蓝色脉冲 badge，done 使用绿色圆形勾+绿色 badge，error 使用红色圆形叉+红色 badge
+  - 进行中步骤增加了浅蓝背景高亮（is-running class），失败步骤增加了浅红背景高亮（is-error class）
+  - "进行中" badge 带有 CSS pulse 动画，让用户能快速注意到当前活跃步骤
+  - 修复了 runPipeline 中的 stale closure bug：之前 catch 块读取 `pipelineCurrent`（React 闭包捕获的旧值），导致错误步骤报告不准确；现在使用局部变量 `currentStep` 跟踪当前步骤，闭包依赖从 `[pipelineCurrent]` 改为 `[]`
+  - 错误详情文字从 11px 增大到 12px，颜色从 #888 改为 #b91c1c（深红），max-width 140px 支持换行
+  - 移动端（640px 以下）进度条缩小 label 和 badge 字号，error-detail max-width 收窄为 100px
+  - test_demo_flow.py 和 test_matching.py 的失败均为既有问题
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
 ---
