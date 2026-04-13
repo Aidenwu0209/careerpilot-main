@@ -50,13 +50,17 @@ def get_path_result(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    # 兼容旧记录：vertical_graph_json/transition_graph_json 为空 dict 时降级
+    vertical_graph = path_result.vertical_graph_json if path_result.vertical_graph_json else {}
+    transition_graph = path_result.transition_graph_json if path_result.transition_graph_json else {}
+
     return APIResponse(data={
         "primary_path": path_result.primary_path_json or [],
         "alternate_paths": path_result.alternate_paths_json or [],
-        "vertical_graph": {},
-        "transition_graph": {},
+        "vertical_graph": vertical_graph,
+        "transition_graph": transition_graph,
         "gaps": path_result.gaps_json or [],
         "recommendations": path_result.recommendations_json or [],
-        "rationale": "历史记录仅保留基础路径；重新生成可查看完整岗位图谱。",
+        "rationale": path_result.rationale or "历史记录仅保留基础路径；重新生成可查看完整岗位图谱。",
         "target_job_code": path_result.target_job_code,
     })
