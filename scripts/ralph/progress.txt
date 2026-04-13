@@ -9,6 +9,9 @@
 - PathRecommendation model is the DB backing for career path snapshots; add new JSON columns with `default=dict` for backward compat.
 - get_path_result endpoint must provide backward-compatible fallback when graph snapshots are missing from old records.
 - CareerPathService.plan_path returns vertical_graph and transition_graph; both must be persisted to PathRecommendation.
+- Cross-entity references (e.g. CareerReport -> PathRecommendation) use nullable FK columns to avoid breaking old records; always check null before fetching linked data.
+- Report page should fetch graph data via getPathResult(path_recommendation_id) instead of duplicating graph structures in report content_json.
+- Vertical graph timeline rendering: use `node.stage === "当前目标" || index === 0` to detect the target node for highlighting.
 ---
 
 ## 2026-04-13 16:10 - US-001
@@ -19,4 +22,31 @@
   - plan_path 服务现在将 vertical_graph 和 transition_graph 持久化到 DB
   - get_path_result 端点返回保存的图谱快照，对旧记录提供从文本路径构建最小图谱的兼容处理
   - 前端 path/page.tsx 已支持 vertical_graph 和 transition_graph 渲染，无需修改
+---
+
+## 2026-04-13 16:25 - US-002
+- 实现了报告页与路径页、历史页一致的图谱数据口径
+- 更改的文件：backend/app/models/entities.py, backend/app/services/reports/report_service.py, backend/app/schemas/report.py, backend/app/api/routers/reports.py, frontend/lib/api.ts, frontend/app/results/[id]/page.tsx
+- **未来迭代的学习：**
+  - CareerReport 模型新增 path_recommendation_id 可空外键列，关联 PathRecommendation
+  - report_service.generate_report 在 plan_path 后查询 PathRecommendation 并将其 ID 存入报告
+  - ReportResponse schema 和 API 端点新增 path_recommendation_id 字段
+  - 前端 ReportDraft 类型新增 path_recommendation_id 字段
+  - results/[id]/page.tsx 在加载报告后通过 path_recommendation_id 获取 PathPlan 图谱数据
+  - 报告页在图谱可用时，在报告正文上方渲染与路径页一致的垂直图谱和换岗图谱
+  - 图谱不可用时（path_recommendation_id 为 null 或获取失败），报告页正常显示纯文本报告
+  - api.ts 中 generateReport 的 fallback 返回值也需要包含 path_recommendation_id: null
+---
+
+## 2026-04-13 17:05 - US-003
+- 实现了垂直岗位图谱主视图渲染，改为垂直时间线布局，高亮当前目标岗位节点
+- 更改的文件：frontend/app/student/path/page.tsx
+- **未来迭代的学习：**
+  - 将垂直图谱从 grid 横向布局改为 flex column + timeline rail 垂直布局，视觉上更符合"晋升路径"语义
+  - 当前目标节点（stage === "当前目标" 或 index === 0）通过蓝色边框、蓝色背景、光晕和蓝色 badge 高亮
+  - timeline rail 使用圆点 + 竖线连接各节点，目标节点圆点更大并带 box-shadow 光晕
+  - stage badge 在目标节点上使用蓝色填充白字，非目标节点使用浅绿底绿字
+  - ESLint 未配置（无 .eslintrc），next lint 需要交互式配置，暂时跳过
+  - 需要手动浏览器验证（agent-browser 可用但 dev server 未启动）
+---
 ---
