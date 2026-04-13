@@ -153,12 +153,36 @@ export default function LoginPage() {
                 type="button"
                 className="btn-primary"
                 style={{ marginTop: "12px", width: "100%", background: "#555" }}
-                onClick={() => {
-                  setCookie("dev_bypass", "true");
-                  setCookie("user_role", activeRole);
-                  localStorage.setItem("token", "dev-bypass");
-                  localStorage.setItem("user_role", activeRole);
-                  router.replace(roleRedirects[activeRole]);
+                onClick={async () => {
+                  const demoAccounts: Record<string, { username: string; password: string }> = {
+                    student: { username: "student_demo", password: "demo123" },
+                    teacher: { username: "teacher_demo", password: "demo123" },
+                    admin: { username: "admin_demo", password: "demo123" },
+                  };
+                  const acct = demoAccounts[activeRole];
+                  try {
+                    const res = await fetch(`${API_BASE}/auth/login`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ username: acct.username, password: acct.password, role: activeRole }),
+                    });
+                    if (!res.ok) throw new Error("登录失败");
+                    const data = await res.json();
+                    const token = data.token || data.access_token;
+                    const role = (data.role || activeRole) as RoleKey;
+                    localStorage.setItem("token", token);
+                    localStorage.setItem("user_role", role);
+                    setCookie("auth_token", token);
+                    setCookie("user_role", role);
+                    router.replace(roleRedirects[role]);
+                  } catch {
+                    // fallback: bypass without real token
+                    setCookie("dev_bypass", "true");
+                    setCookie("user_role", activeRole);
+                    localStorage.setItem("token", "dev-bypass");
+                    localStorage.setItem("user_role", activeRole);
+                    router.replace(roleRedirects[activeRole]);
+                  }
                 }}
               >
                 开发模式直接进入（{roles.find(r => r.key === activeRole)?.label}）
