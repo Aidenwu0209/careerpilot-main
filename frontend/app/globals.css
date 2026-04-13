@@ -2171,6 +2171,66 @@ a[aria-label] {
   cursor: not-allowed;
 }
 
+.student-main__pipeline-wrap {
+  max-width: 720px;
+  margin: 0 auto 16px;
+}
+
+.student-main__result-area {
+  max-width: 720px;
+  margin: 0 auto 16px;
+  text-align: center;
+}
+
+.student-main__result-title {
+  font-size: 0.9375rem;
+  color: #666;
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+
+.student-main__result-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.student-main__result-btn {
+  text-decoration: none;
+  display: inline-flex;
+  font-size: 14px;
+  padding: 8px 16px;
+  background: #2563eb;
+}
+
+.student-main__result-btn--red {
+  background: #dc2626;
+}
+
+.student-main__result-btn--purple {
+  background: #7c3aed;
+}
+
+.student-main__result-btn--teal {
+  background: #0891b2;
+}
+
+.student-main__result-btn--green {
+  background: #059669;
+}
+
+.student-main__result-hint {
+  font-size: 0.8125rem;
+  color: #888;
+  margin: 8px 0 0;
+}
+
+.student-main__result-hint a {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
 /* ===========================
    LOGIN PAGE - ROLE TABS
    =========================== */

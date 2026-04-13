@@ -425,41 +425,43 @@ export default function StudentMainPage() {
     );
 
     return (
-      <PipelineProgress
-        steps={steps}
-        onRetry={retryPipeline}
-      />
+      <div className="student-main__pipeline-wrap">
+        <PipelineProgress
+          steps={steps}
+          onRetry={retryPipeline}
+        />
+      </div>
     );
   };
 
   const renderPipelineResult = () => {
     if (!pipelineDone) return null;
     return (
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ fontSize: "0.9375rem", color: "#666", margin: "0 0 12px", fontWeight: 500 }}>
+      <div className="student-main__result-area">
+        <p className="student-main__result-title">
           🎉 分析完成！以下是你的能力档案和职业规划结果：
         </p>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <Link href="/student/profile" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex", fontSize: 14, padding: "8px 16px" }}>
+        <div className="student-main__result-actions">
+          <Link href="/student/profile" className="btn-primary student-main__result-btn">
             查看能力画像
           </Link>
-          <Link href="/student/recommended" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex", fontSize: 14, padding: "8px 16px", background: "#dc2626" }}>
+          <Link href="/student/recommended" className="btn-primary student-main__result-btn student-main__result-btn--red">
             查看推荐岗位
           </Link>
-          <Link href="/student/matching" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex", fontSize: 14, padding: "8px 16px", background: "#7c3aed" }}>
+          <Link href="/student/matching" className="btn-primary student-main__result-btn student-main__result-btn--purple">
             查看匹配分析
           </Link>
-          <Link href="/student/path" className="btn-primary" style={{ textDecoration: "none", display: "inline-flex", fontSize: 14, padding: "8px 16px", background: "#0891b2" }}>
+          <Link href="/student/path" className="btn-primary student-main__result-btn student-main__result-btn--teal">
             查看职业路径
           </Link>
           {reportId && (
-            <Link href={`/results/${reportId}`} className="btn-primary" style={{ textDecoration: "none", display: "inline-flex", fontSize: 14, padding: "8px 16px", background: "#059669" }}>
+            <Link href={`/results/${reportId}`} className="btn-primary student-main__result-btn student-main__result-btn--green">
               查看完整报告
             </Link>
           )}
         </div>
-        <p style={{ fontSize: "0.8125rem", color: "#888", margin: "8px 0 0" }}>
-          💡 所有结果也会保存在<a href="/student/history" style={{ color: "#1a73e8", textDecoration: "none" }}>历史记录</a>中，随时可以查看
+        <p className="student-main__result-hint">
+          💡 所有结果也会保存在<a href="/student/history">历史记录</a>中，随时可以查看
         </p>
       </div>
     );
