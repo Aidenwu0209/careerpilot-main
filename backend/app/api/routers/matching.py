@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_container, get_current_user, get_db_session
-from app.models import MatchResult, User
+from app.models import MatchDimensionScore, MatchResult, User
 from app.schemas.matching import MatchingRequest, MatchingResponse
 from app.services.bootstrap import ServiceContainer
 
@@ -54,12 +54,48 @@ def get_match_result(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    # Build dimensions list from stored JSON (new records) or MatchDimensionScore table (old records)
+    dimensions = match_result.dimensions_json if match_result.dimensions_json else []
+    if not dimensions:
+        # Backward compatibility: reconstruct from MatchDimensionScore table
+        dim_scores = list(db.scalars(
+            select(MatchDimensionScore)
+            .where(MatchDimensionScore.match_result_id == match_result.id)
+        ).all())
+        dimensions = [
+            {
+                "dimension": ds.dimension,
+                "score": ds.score,
+                "weight": ds.weight,
+                "reasoning": ds.reasoning,
+                "evidence": ds.evidence_json or {},
+            }
+            for ds in dim_scores
+        ]
+
+    student_id = student_profile.student_id if student_profile else 0
+
+    # Use stored job_code or derive from job_profile relationship
+    job_code = match_result.job_code or ""
+    if not job_code and match_result.job_profile:
+        job_code = match_result.job_profile.job_code
+
+    # Use stored weights or derive default
+    weights = match_result.weights_json if match_result.weights_json else {
+        "basic_requirements": 0.2,
+        "professional_skills": 0.4,
+        "professional_literacy": 0.2,
+        "development_potential": 0.2,
+    }
+
     return MatchingResponse(
-        student_profile_id=match_result.student_profile_id,
-        job_profile_id=match_result.job_profile_id,
+        student_id=student_id,
+        job_code=job_code,
         total_score=match_result.total_score,
-        dimensions=match_result.dimensions_json or [],
-        gap_items=match_result.gap_items_json or [],
+        weights=weights,
+        dimensions=dimensions,
+        gap_items=match_result.gaps_json or [],
+        suggestions=match_result.suggestions_json or [],
         summary=match_result.summary or "",
     )
 

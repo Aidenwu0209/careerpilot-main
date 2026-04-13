@@ -198,10 +198,15 @@ class MatchResult(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_profile_id: Mapped[int] = mapped_column(ForeignKey("student_profiles.id"), index=True)
     job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id"), index=True)
+    job_code: Mapped[str] = mapped_column(String(80), default="")
     total_score: Mapped[float] = mapped_column(Float, default=0.0)
     summary: Mapped[str] = mapped_column(Text, default="")
     gaps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     suggestions_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    dimensions_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    weights_json: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
+    student_profile: Mapped["StudentProfile"] = relationship()
+    job_profile: Mapped["JobProfile"] = relationship()
 
 
 class MatchDimensionScore(TimestampMixin, Base):

@@ -113,6 +113,9 @@ class MatchingService:
             match.summary = summary
             match.gaps_json = gap_items
             match.suggestions_json = suggestions
+            match.dimensions_json = dimensions
+            match.weights_json = weights
+            match.job_code = job_code
             db.execute(delete(MatchDimensionScore).where(MatchDimensionScore.match_result_id == match.id))
             for dimension in dimensions:
                 db.add(
