@@ -15,6 +15,7 @@
 - `score_recommended_job()` 返回的 `evidence_boost` 表示 OCR 项目/意向证据加分，总分 = 四维加权平均（含 evidence_boost）
 - 报告生成前需通过证据校验门禁（`_check_evidence_sufficiency`），资料不足时返回 `status="insufficient_data"` + `missing_evidence` 列表，前端据此展示明确提示
 - `ReportResponse` 中 `content` 和 `markdown_content` 需允许空值（`dict`/`str` 默认值），否则 `insufficient_data` 状态无法通过 Pydantic 校验
+- 统一目标岗位解析逻辑提取到 `app.services.student.target_job.resolve_target_job()`，所有需要目标岗位的模块应从此处导入，不要各自实现回退逻辑
 
 ---
 ## 2026-04-13 11:25 - US-001
@@ -117,4 +118,15 @@
   - `MockLLMProvider._chat()` 中原先根据关键词匹配返回完整报告模板，这导致即使没有真实数据也会输出看似完整的分析，现已移除
   - `goals` 中移除了 `industry_trend` 字段（之前硬编码为"数字化岗位需求持续增长"），如果下游代码依赖此字段需注意
   - ErnieLLMProvider 的 system_prompt 现在分为结构骨架和正文生成两个明确区块，未来新增指令时应保持这种分离
+---
+## 2026-04-13 21:30 - US-009
+- 将 `_resolve_target_job()` 从 `students.py` 路由层提取到 `app.services.student.target_job.resolve_target_job()` 共享模块
+- 后端报告生成端点 `POST /reports/generate` 改为先通过统一解析逻辑获取目标岗位，不再依赖前端传入的 `job_code`
+- `ReportGenerateRequest.job_code` 改为可选字段（`str | None`），后端独立解析
+- 目标岗位无法解析时返回 422 错误，提示用户先完成岗位推荐或手动确认
+- 更改的文件：`backend/app/services/student/__init__.py`（新建）、`backend/app/services/student/target_job.py`（新建）、`backend/app/api/routers/students.py`、`backend/app/api/routers/reports.py`、`backend/app/schemas/report.py`
+- **未来迭代的学习：**
+  - 跨路由共享的业务逻辑应提取到 `services/` 层，不要在路由文件中定义可复用函数
+  - `reports.py` 原先直接信任前端传入的 `job_code`，用户手动切换岗位后如果前端缓存了旧值，报告会围绕错误岗位生成
+  - `resolve_target_job()` 现在是唯一的权威解析入口，未来新增需要目标岗位的功能（如对话、导出）也应调用此函数
 ---
