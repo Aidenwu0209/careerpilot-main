@@ -1,0 +1,318 @@
+{
+  "project": "CareerPilot",
+  "branchName": "ralph/careerpilot-unfinished-issue-remediation",
+  "description": "修复 CareerPilot 当前未完成问题，覆盖岗位图谱不退化、历史图谱回放、模板优先级、目标岗位来源、结果区布局、进度状态、OCR 兜底和回归测试。",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "统一当前路径与历史路径的图谱快照结构",
+      "description": "作为系统，我需要让当前路径结果和历史路径记录使用同一套图谱快照结构，以便后续页面可以稳定回放完整岗位图谱。",
+      "acceptanceCriteria": [
+        "当前路径结果和历史路径记录共享同一套 vertical graph 与 transition graph 数据结构",
+        "历史记录中保存可直接回放的图谱快照，而不是仅保存文本路径",
+        "缺少图谱快照的旧记录有明确兼容处理，不会让新逻辑直接报错",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-002",
+      "title": "统一报告页使用的路径图谱数据口径",
+      "description": "作为系统，我需要让报告页读取与路径页、历史页一致的图谱结果，以便同一次分析在不同页面不会出现图谱口径不一致。",
+      "acceptanceCriteria": [
+        "报告页读取与路径页、历史页一致的图谱结果来源",
+        "同一次分析在路径页、历史页和报告页展示的主路径与换岗路径结论一致",
+        "没有图谱快照时返回明确兼容结果，而不是退回普通列表文案",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-003",
+      "title": "渲染垂直岗位图谱主视图",
+      "description": "作为学生用户，我希望在职业路径页直接看到垂直岗位图谱，以便理解目标岗位的纵向成长路径。",
+      "acceptanceCriteria": [
+        "职业路径页提供独立的垂直岗位图谱区域",
+        "图谱展示目标岗位主晋升路径、节点层级、阶段信息、节点描述和核心技能",
+        "当前目标岗位节点在图谱中有清晰高亮",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-004",
+      "title": "渲染换岗路径图谱主视图",
+      "description": "作为学生用户，我希望在职业路径页直接看到换岗路径图谱，以便评估相关岗位的转岗方向和技能桥接点。",
+      "acceptanceCriteria": [
+        "职业路径页提供独立的换岗路径图谱区域",
+        "换岗图谱至少展示 5 个相关岗位",
+        "每个相关岗位至少展示 2 条换岗路径",
+        "每条路径展示路径步骤、转换说明和技能桥接点",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-005",
+      "title": "移除路径页与历史页的普通列表退化展示",
+      "description": "作为学生用户，我希望路径结果始终以图谱为主展示形态，而不是退化成普通文本列表，以便界面表达稳定一致。",
+      "acceptanceCriteria": [
+        "路径页不再以普通 ul/li 或纯文本路径作为主展示",
+        "历史路径页重新打开后优先显示图谱快照而不是普通列表",
+        "路径页和历史页在图谱可用时都不出现纯文本退化展示",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-006",
+      "title": "修复报告正文对匹配证据字段的消费映射",
+      "description": "作为系统，我需要让报告正文逐项消费真实匹配结果字段，以便差距分析和行动建议不再退化成泛化文案。",
+      "acceptanceCriteria": [
+        "报告正文中的差距项、建议项和总结项使用真实匹配结果字段构造",
+        "匹配结果字段名变化时有统一映射，不再依赖错误字段名读取空值",
+        "上传不同简历后，报告中的差距分析和行动建议明显变化",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-007",
+      "title": "让报告生成严格遵守证据优先、模板后置",
+      "description": "作为用户，我希望报告先消费真实简历和分析证据，再使用模板组织结构，以便输出不是固定范本。",
+      "acceptanceCriteria": [
+        "模板仅定义标题结构、章节顺序、字段占位和输出格式",
+        "报告生成先消费简历、OCR、画像、匹配结果和路径结果，再套用模板结构",
+        "资料不足时返回明确的 insufficient_data 或等价缺证据状态，而不是伪完整报告",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-008",
+      "title": "让对话输出同样遵守证据优先、模板后置",
+      "description": "作为用户，我希望对话回答先读取我的真实数据，再生成结构化建议，以便不会直接套用固定长模板。",
+      "acceptanceCriteria": [
+        "对话系统提示不再注入固定长篇职业规划范文",
+        "对话回答优先引用当前用户的简历、画像、匹配或路径数据",
+        "缺少真实数据时返回缺信息提示，而不是直接输出完整通用模板",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-009",
+      "title": "持久化用户手动确认的目标岗位",
+      "description": "作为已选择目标岗位的用户，我希望手动切换岗位后立即被系统保存，以便报告和后续分析都围绕新的目标岗位生成。",
+      "acceptanceCriteria": [
+        "用户手动选择岗位后立即调用目标岗位持久化接口",
+        "刷新页面后仍能读取到用户刚刚确认的目标岗位",
+        "用户切换岗位后，不再只停留在前端本地状态",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-010",
+      "title": "统一推荐页、匹配页、路径页和报告页的目标岗位口径",
+      "description": "作为用户，我希望推荐页、匹配页、路径页和报告页使用同一个当前目标岗位，以便不会出现岗位错位。",
+      "acceptanceCriteria": [
+        "报告生成按统一优先级解析目标岗位：手动确认 > 已确认推荐岗位 > 最近匹配岗位 > 默认回退",
+        "推荐页、匹配页、路径页和报告页显示同一当前目标岗位",
+        "历史报告打开时展示报告生成当时对应的目标岗位，而不是当前会话岗位",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-011",
+      "title": "居中分析完成后的结果操作区",
+      "description": "作为用户，我希望分析完成后的结果区整体居中且稳定，以便顺畅进入能力画像、推荐岗位、匹配分析、职业路径和完整报告。",
+      "acceptanceCriteria": [
+        "分析完成后的结果区整体居中",
+        "结果区宽度与主内容区对齐",
+        "桌面端按钮居中排列且不左偏",
+        "移动端按钮自动换行且不溢出屏幕",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-012",
+      "title": "建立分析流水线的真实状态流转模型",
+      "description": "作为系统，我需要让分析流程拥有 pending、running、completed、failed 四态，以便前端可以准确反映真实进度。",
+      "acceptanceCriteria": [
+        "分析流程支持 pending、running、completed、failed 四种状态",
+        "状态随真实任务执行过程流转，不再提前标记完成",
+        "失败后可明确标记失败步骤，重试时能够重置并重新流转",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-013",
+      "title": "在进度条中展示进行中和失败状态",
+      "description": "作为等待分析结果的用户，我希望进度条明确展示当前进行中的步骤和失败位置，以便判断系统当前状态。",
+      "acceptanceCriteria": [
+        "进度条显示待开始、进行中、已完成、失败四种可区分状态",
+        "当前执行步骤明确显示为进行中",
+        "失败时明确显示失败步骤和错误说明",
+        "不再出现任务未完成但界面已经显示已完成的情况",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-014",
+      "title": "统一 OCR 失败的错误分类与重试语义",
+      "description": "作为系统，我需要区分文件解析失败、OCR 服务异常和网络超时，以便前端能够显示一致且可执行的错误提示。",
+      "acceptanceCriteria": [
+        "OCR 失败结果区分文件不可解析、服务异常和网络或超时异常",
+        "第三方 OCR 返回 500 时返回统一的服务异常语义",
+        "OCR 失败响应包含前端可直接消费的重试信息",
+        "OCR 未成功时不会继续进入后续画像、匹配、路径或报告生成",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-015",
+      "title": "在上传流程中展示友好的 OCR 失败提示与重试入口",
+      "description": "作为上传简历的用户，我希望 OCR 失败时看到清晰提示并可立即重试，以便继续完成分析流程。",
+      "acceptanceCriteria": [
+        "OCR 服务异常时页面显示明确友好的失败提示",
+        "上传流程中提供明确的重试 OCR 入口",
+        "OCR 失败后页面不会继续展示伪完整分析结果",
+        "错误提示在浏览器中可见可用且文案可理解",
+        "Typecheck passes",
+        "Verify in browser using agent-browser"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-016",
+      "title": "补齐岗位图谱与历史回放回归测试",
+      "description": "作为开发者，我希望岗位图谱和历史图谱回放都有自动化回归覆盖，以便后续调整不会重新引入退化展示问题。",
+      "acceptanceCriteria": [
+        "新增图谱主视图不退化的自动化测试",
+        "新增历史路径图谱回放的自动化测试",
+        "新增路径页、历史页和报告页图谱口径一致性的自动化测试",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-017",
+      "title": "补齐模板优先级与目标岗位一致性回归测试",
+      "description": "作为开发者，我希望模板优先级和目标岗位来源都有自动化回归覆盖，以便报告不会再次退化成固定范本或出现岗位错位。",
+      "acceptanceCriteria": [
+        "新增报告证据优先和 insufficient_data 场景测试",
+        "新增对话输出不套固定长模板的测试",
+        "新增手动切换岗位后报告岗位一致性的测试",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    },
+    {
+      "id": "US-018",
+      "title": "补齐进度状态与 OCR 异常回归测试",
+      "description": "作为开发者，我希望进度状态和 OCR 异常路径都有自动化回归覆盖，以便状态错位和异常提示问题不会再次出现。",
+      "acceptanceCriteria": [
+        "新增进度条 running 和 failed 状态流转测试",
+        "新增 OCR 500、文件解析失败和重试场景测试",
+        "集成测试适配当前鉴权逻辑，避免旧测试夹具造成大面积误报",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "",
+      "retryCount": 0,
+      "blocked": false
+    }
+  ]
+}
