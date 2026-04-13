@@ -213,6 +213,8 @@ export default function StudentMainPage() {
       setPipelineCompletedSteps(new Set());
 
       let runId: number | null = null;
+      // Track current step locally to avoid stale closure on pipelineCurrent
+      let currentStep: string = "uploaded";
 
       try {
         // Start backend analysis run
@@ -221,48 +223,52 @@ export default function StudentMainPage() {
         setAnalysisRunId(runId);
 
         // Step 1: uploaded
-        setPipelineCurrent("uploaded");
-        await markStepRunning(runId, "uploaded");
-        await markStepComplete(runId, "uploaded");
-        setPipelineCompletedSteps((prev) => new Set(prev).add("uploaded"));
+        currentStep = "uploaded";
+        setPipelineCurrent(currentStep);
+        await markStepRunning(runId, currentStep);
+        await markStepComplete(runId, currentStep);
+        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
         // Step 2: parsed (OCR)
-        setPipelineCurrent("parsed");
-        await markStepRunning(runId, "parsed");
+        currentStep = "parsed";
+        setPipelineCurrent(currentStep);
+        await markStepRunning(runId, currentStep);
         for (const fid of fileIds) {
           await parseOCR(fid, "resume");
         }
-        await markStepComplete(runId, "parsed");
-        setPipelineCompletedSteps((prev) => new Set(prev).add("parsed"));
+        await markStepComplete(runId, currentStep);
+        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
         // Step 3: profiled
-        setPipelineCurrent("profiled");
-        await markStepRunning(runId, "profiled");
+        currentStep = "profiled";
+        setPipelineCurrent(currentStep);
+        await markStepRunning(runId, currentStep);
         await generateStudentProfile(sid, fileIds);
-        await markStepComplete(runId, "profiled");
-        setPipelineCompletedSteps((prev) => new Set(prev).add("profiled"));
+        await markStepComplete(runId, currentStep);
+        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
         // Step 4: matched
-        setPipelineCurrent("matched");
-        await markStepRunning(runId, "matched");
+        currentStep = "matched";
+        setPipelineCurrent(currentStep);
+        await markStepRunning(runId, currentStep);
         await getMatching(sid, jCode);
-        await markStepComplete(runId, "matched");
-        setPipelineCompletedSteps((prev) => new Set(prev).add("matched"));
+        await markStepComplete(runId, currentStep);
+        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
         // Step 5: reported
-        setPipelineCurrent("reported");
-        await markStepRunning(runId, "reported");
+        currentStep = "reported";
+        setPipelineCurrent(currentStep);
+        await markStepRunning(runId, currentStep);
         const report = await generateReport(sid, jCode);
-        await markStepComplete(runId, "reported");
-        setPipelineCompletedSteps((prev) => new Set(prev).add("reported"));
+        await markStepComplete(runId, currentStep);
+        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
         await markAnalysisComplete(runId);
         setReportId(report.report_id);
 
         setPipelineDone(true);
       } catch (err: unknown) {
-        // Determine which step failed based on current pipeline state
-        const current = pipelineCurrent || "uploaded";
-        setPipelineError(current);
+        // Use locally tracked step to avoid stale closure
+        setPipelineError(currentStep);
         let detail = "未知错误";
         if (err instanceof APIError) {
           detail = err.message;
@@ -274,7 +280,7 @@ export default function StudentMainPage() {
         // Mark failure in backend
         if (runId) {
           try {
-            await markStepFailed(runId, current, detail);
+            await markStepFailed(runId, currentStep, detail);
           } catch {
             // Ignore state update failures
           }
@@ -283,7 +289,7 @@ export default function StudentMainPage() {
         setPipelineRunning(false);
       }
     },
-    [pipelineCurrent]
+    []
   );
 
   const retryPipeline = useCallback(() => {
