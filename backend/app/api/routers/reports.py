@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_container, get_current_user, get_db_session
 from app.api.routers.students import resolve_target_job
-from app.models import Student, User
+from app.models import Student, UploadedFile, User
 from app.schemas.report import (
     ReportCheckRequest,
     ReportCheckResponse,
@@ -36,6 +36,20 @@ def get_report(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在")
     if not report.content_json or not report.markdown_content:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告尚未生成")
+
+    # Check if source files for this report's profile version have been deleted
+    source_files_deleted = False
+    if report.profile_version_id:
+        from app.models import ProfileVersion
+        pv = db.scalar(select(ProfileVersion).where(ProfileVersion.id == report.profile_version_id))
+        if pv and pv.uploaded_file_ids:
+            existing_count = db.scalar(
+                select(func.count(UploadedFile.id)).where(UploadedFile.id.in_(pv.uploaded_file_ids))
+            )
+            if existing_count < len(pv.uploaded_file_ids):
+                source_files_deleted = True
+
+    from sqlalchemy import func
     return ReportResponse(
         report_id=report.id,
         student_id=report.student_id,
@@ -47,6 +61,7 @@ def get_report(
         profile_version_id=report.profile_version_id,
         match_result_id=report.match_result_id,
         analysis_run_id=report.analysis_run_id,
+        source_files_deleted=source_files_deleted,
     )
 
 

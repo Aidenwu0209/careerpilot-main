@@ -359,6 +359,8 @@ class ChatMessageRecord(TimestampMixin, Base):
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
     has_context: Mapped[bool] = mapped_column(Boolean, default=False)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
 
 
 class ProfileVersion(TimestampMixin, Base):
@@ -372,6 +374,7 @@ class ProfileVersion(TimestampMixin, Base):
     file_summaries_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     evidence_snapshot_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
 
 
 class AnalysisRun(TimestampMixin, Base):

@@ -38,6 +38,7 @@ class ReportResponse(BaseModel):
     profile_version_id: int | None = None
     match_result_id: int | None = None
     analysis_run_id: int | None = None
+    source_files_deleted: bool = False
 
 
 class ReportPolishRequest(BaseModel):

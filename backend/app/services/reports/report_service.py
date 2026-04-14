@@ -69,11 +69,22 @@ class ReportService:
                 if not match_result_id:
                     match_result_id = run.match_result_id
 
-        report = db.scalar(
-            select(CareerReport)
-            .where(CareerReport.student_id == student_id)
-            .where(CareerReport.target_job_code == job_code)
-        )
+        # If analysis_run_id is provided, look for a report bound to that specific run
+        # to support multiple reports per student+job (different analysis runs)
+        if analysis_run_id:
+            report = db.scalar(
+                select(CareerReport)
+                .where(CareerReport.student_id == student_id)
+                .where(CareerReport.target_job_code == job_code)
+                .where(CareerReport.analysis_run_id == analysis_run_id)
+            )
+        else:
+            report = db.scalar(
+                select(CareerReport)
+                .where(CareerReport.student_id == student_id)
+                .where(CareerReport.target_job_code == job_code)
+                .where(CareerReport.analysis_run_id == None)
+            )
         if (
             report
             and report.content_json
@@ -196,11 +207,21 @@ class ReportService:
                 "path_result": path_result,
             }
         )
-        report = db.scalar(
-            select(CareerReport)
-            .where(CareerReport.student_id == student_id)
-            .where(CareerReport.target_job_code == job_code)
-        )
+        # Use the same run-scoped lookup for the post-LLM write
+        if analysis_run_id:
+            report = db.scalar(
+                select(CareerReport)
+                .where(CareerReport.student_id == student_id)
+                .where(CareerReport.target_job_code == job_code)
+                .where(CareerReport.analysis_run_id == analysis_run_id)
+            )
+        else:
+            report = db.scalar(
+                select(CareerReport)
+                .where(CareerReport.student_id == student_id)
+                .where(CareerReport.target_job_code == job_code)
+                .where(CareerReport.analysis_run_id == None)
+            )
         if not report:
             report = CareerReport(student_id=student_id, target_job_code=job_code)
             db.add(report)
