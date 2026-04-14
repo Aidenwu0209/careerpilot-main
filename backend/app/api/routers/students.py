@@ -25,8 +25,10 @@ from app.models import (
 )
 from app.services.matching.recommendation import (
     extract_resume_experience_context,
+    generate_recommendation_reason,
     score_recommended_job,
 )
+from app.schemas.job import RecommendedJobItem, RecommendedJobsResponse
 
 router = APIRouter()
 
@@ -209,42 +211,37 @@ def get_recommended_jobs(
             matched = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"] + scoring["intent_tags"]))[:6]
             missing = scoring["missing_skills"][:4]
 
-            if scoring["intent_tags"]:
-                reason = f"OCR 意向岗位命中 {', '.join(scoring['intent_tags'])}，并结合项目/技能证据推荐。"
-            elif scoring["experience_reason"]:
-                reason = scoring["experience_reason"]
-            elif len(matched) >= 3:
-                reason = f"已掌握 {', '.join(matched[:3])} 等核心技能。"
-            elif len(matched) >= 1:
-                reason = f"已掌握 {', '.join(matched)}，可补强 {', '.join(missing[:2])} 等技能。"
-            elif scoring["potential_score"] >= 80:
-                reason = "学习能力和综合素质较好，适合冲刺此方向。"
-            else:
-                reason = f"建议重点补齐 {', '.join(missing[:3])} 等技能。"
+            reason = generate_recommendation_reason(
+                scoring=scoring,
+                student_profile=student_profile,
+                student_info={"major": student.major, "grade": student.grade},
+                job_profile=jp,
+                experience=experience,
+            )
 
-            jobs.append({
-                "job_code": jp.job_code,
-                "title": jp.title,
-                "company": company_name,
-                "salary": salary_range,
-                "location": posting.location if posting else "",
-                "industry": posting.industry if posting else "",
-                "company_size": posting.company_size if posting else "",
-                "ownership_type": posting.ownership_type if posting else "",
-                "summary": jp.summary or (posting.description if posting else ""),
-                "tags": skills,
-                "matched_tags": matched,
-                "missing_tags": missing,
-                "experience_tags": scoring["experience_tags"],
-                "reason": reason,
-                "match_score": scoring["score"],
-                "base_score": scoring["base_score"],
-                "experience_score": scoring["experience_score"],
-                "skill_score": scoring["skill_score"],
-                "potential_score": scoring["potential_score"],
-            })
+            jobs.append(RecommendedJobItem(
+                job_code=jp.job_code,
+                title=jp.title,
+                company=company_name,
+                salary=salary_range,
+                location=posting.location if posting else "",
+                industry=posting.industry if posting else "",
+                company_size=posting.company_size if posting else "",
+                ownership_type=posting.ownership_type if posting else "",
+                summary=jp.summary or (posting.description if posting else ""),
+                tags=skills,
+                matched_tags=matched,
+                missing_tags=missing,
+                experience_tags=scoring["experience_tags"],
+                reason=reason,
+                match_score=scoring["score"],
+                base_score=scoring["base_score"],
+                experience_score=scoring["experience_score"],
+                skill_score=scoring["skill_score"],
+                potential_score=scoring["potential_score"],
+            ))
 
-    return {"items": jobs}
+    return RecommendedJobsResponse(items=jobs)
 
 
 @router.get("/me/history")
