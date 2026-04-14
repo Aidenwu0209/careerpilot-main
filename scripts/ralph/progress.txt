@@ -4,7 +4,7 @@
 - Source PRD: tasks/prd-careerpilot-platform-optimization.md
 - Created: 2026-04-14
 - Total Stories: 38
-- Completed Stories: 4
+- Completed Stories: 5
 
 ## Codebase Patterns
 - 后端使用 FastAPI + SQLAlchemy 2.0（Mapped/mapped_column 声明式）+ SQLite/PostgreSQL
@@ -161,4 +161,24 @@
   - 版本详情端点 `GET /student-profiles/{student_id}/versions/{version_id}` 返回完整 `ProfileVersionOut` 含 `snapshot` 和 `evidence_snapshot`
   - 后端已有 4 个 pre-existing failures（3 个 auth 401 + 1 个匹配维度断言），与本次改动无关
   - 需要手动浏览器验证：版本历史列表 UI、文件摘要标签、版本切换功能
+---
+
+## 2026-04-14 23:50 - US-008
+- 实现了标准化推荐岗位字段与推荐理由
+  - 新增 `generate_recommendation_reason()` 函数，生成引用真实证据的推荐理由（专业背景、已匹配技能、项目经验、实习经历、意向岗位、证书、缺失技能）
+  - 新增 `RecommendedJobItem` 和 `RecommendedJobsResponse` Pydantic schema，定义标准化推荐结果结构
+  - 更新 `GET /students/me/recommended-jobs` 端点：使用新 schema 和新推荐理由生成逻辑
+  - 前端 `RecommendedJob` 类型已与后端 schema 对齐，无需修改
+  - 测试：新增 17 个测试用例覆盖推荐理由引用证据（11个）、Schema 验证（3个）、API 集成（3个）
+- 更改的文件：
+  - `backend/app/services/matching/recommendation.py` — 新增 `generate_recommendation_reason()` 函数
+  - `backend/app/schemas/job.py` — 新增 `RecommendedJobItem`、`RecommendedJobsResponse` schema
+  - `backend/app/api/routers/students.py` — 使用新 schema 和推荐理由生成函数
+  - `backend/tests/unit/test_recommended_job_fields.py` — 新增测试文件
+- **未来迭代的学习：**
+  - 推荐岗位端点 `GET /students/me/recommended-jobs` 在 `students.py` 路由中，评分逻辑在 `recommendation.py` 的 `score_recommended_job()`
+  - `JobProfile` 模型有 `skill_requirements`（JSON list）和 `dimension_weights`（JSON dict）等字段
+  - `StudentProfile` 有 `skills_json`、`certificates_json`、`projects_json`、`internships_json` 字段可直接引用
+  - Pydantic schema 的 `RecommendedJobItem` 可用于前端类型对齐
+  - 推荐理由使用中文【】括号标注关键词，提高可读性
 ---
