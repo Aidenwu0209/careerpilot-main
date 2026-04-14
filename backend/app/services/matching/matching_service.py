@@ -137,6 +137,7 @@ class MatchingService:
             return {
                 "student_id": student_id,
                 "job_code": job_code,
+                "match_result_id": match.id,
                 "total_score": total_score,
                 "weights": weights,
                 "dimensions": dimensions,

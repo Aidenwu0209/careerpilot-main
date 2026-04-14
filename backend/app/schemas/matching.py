@@ -21,6 +21,7 @@ class DimensionScore(BaseModel):
 class MatchingResponse(BaseModel):
     student_id: int
     job_code: str
+    match_result_id: int | None = None
     total_score: float
     weights: DimensionWeight
     dimensions: list[DimensionScore]
