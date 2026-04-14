@@ -18,6 +18,7 @@ import {
   getGreeting,
   updateTargetJob,
   startAnalysisRun,
+  updateAnalysisContext,
   markStepRunning,
   markStepComplete,
   markStepFailed,
@@ -242,6 +243,8 @@ export default function StudentMainPage() {
       let runId: number | null = null;
       // Track current step locally to avoid stale closure on pipelineCurrent
       let currentStep: string = "uploaded";
+      let profileVersionId: number | null = null;
+      let matchResultId: number | null = null;
 
       try {
         // Start backend analysis run
@@ -270,7 +273,11 @@ export default function StudentMainPage() {
         currentStep = "profiled";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
-        await generateStudentProfile(sid, fileIds);
+        const profile = await generateStudentProfile(sid, fileIds);
+        profileVersionId = profile.profile_version_id ?? null;
+        if (profileVersionId) {
+          await updateAnalysisContext(runId, { profile_version_id: profileVersionId });
+        }
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
@@ -278,7 +285,11 @@ export default function StudentMainPage() {
         currentStep = "matched";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
-        await getMatching(sid, jCode);
+        const matching = await getMatching(sid, jCode, profileVersionId, runId);
+        matchResultId = matching.match_result_id ?? null;
+        if (matchResultId) {
+          await updateAnalysisContext(runId, { match_result_id: matchResultId });
+        }
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
@@ -286,7 +297,17 @@ export default function StudentMainPage() {
         currentStep = "reported";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
-        const report = await generateReport(sid, jCode);
+        const report = await generateReport(sid, jCode, {
+          analysis_run_id: runId,
+          profile_version_id: profileVersionId,
+          match_result_id: matchResultId,
+        });
+        await updateAnalysisContext(runId, {
+          report_id: report.report_id,
+          profile_version_id: report.profile_version_id ?? profileVersionId,
+          match_result_id: report.match_result_id ?? matchResultId,
+          path_recommendation_id: report.path_recommendation_id,
+        });
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
         await markAnalysisComplete(runId);

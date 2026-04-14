@@ -1,7 +1,7 @@
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.models import Student, Teacher, TeacherStudentLink, User
+from app.models import CareerReport, Student, Teacher, TeacherStudentLink, User
 
 
 def test_student_register_with_teacher_code_creates_link(client):
@@ -107,3 +107,63 @@ def test_student_info_update_syncs_to_teacher_view(client):
     assert synced["major"] == "软件工程"
     assert synced["grade"] == "大三"
     assert synced["career_goal"] == "前端开发工程师"
+
+    with SessionLocal() as db:
+        report = CareerReport(
+            student_id=updated["student_id"],
+            target_job_code="J-FE-001",
+            status="generated",
+            content_json={
+                "student_summary": {},
+                "resume_summary": {},
+                "capability_profile": {},
+                "target_job_analysis": {},
+                "matching_analysis": {},
+                "gap_analysis": {},
+                "career_path": {},
+                "short_term_plan": {},
+                "mid_term_plan": {},
+                "evaluation_cycle": {},
+                "teacher_comments": {},
+            },
+            markdown_content="# 同步测试报告\n\n教师端可查看。",
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        report_id = report.id
+
+    list_resp = client.get(
+        f"/api/v1/teacher/students/{updated['student_id']}/reports",
+        headers={"Authorization": f"Bearer {teacher_token}"},
+    )
+    assert list_resp.status_code == 200, list_resp.text
+    report_rows = list_resp.json()["data"]
+    assert any(row["report_id"] == report_id for row in report_rows)
+
+
+def test_teacher_info_can_be_updated(client):
+    login = client.post("/api/v1/auth/login", json={
+        "username": "teacher_demo",
+        "password": "demo123",
+    })
+    assert login.status_code == 200, login.text
+    token = login.json()["access_token"]
+
+    resp = client.put(
+        "/api/v1/teacher/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "full_name": "王老师更新",
+            "email": "teacher_updated@careerpilot.local",
+            "department": "计算机学院",
+            "title": "就业指导老师",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()["data"]
+    assert data["username"] == "teacher_demo"
+    assert data["full_name"] == "王老师更新"
+    assert data["email"] == "teacher_updated@careerpilot.local"
+    assert data["department"] == "计算机学院"
+    assert data["title"] == "就业指导老师"

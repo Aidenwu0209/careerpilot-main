@@ -167,11 +167,16 @@ export async function getStudentProfile(studentId: number): Promise<StudentProfi
   }
 }
 
-export async function getMatching(studentId: number, jobCode: string): Promise<MatchingResult> {
+export async function getMatching(studentId: number, jobCode: string, profileVersionId?: number | null, analysisRunId?: number | null): Promise<MatchingResult> {
   try {
     return await request<MatchingResult>("/matching/analyze", {
       method: "POST",
-      body: JSON.stringify({ student_id: studentId, job_code: jobCode })
+      body: JSON.stringify({
+        student_id: studentId,
+        job_code: jobCode,
+        profile_version_id: profileVersionId ?? null,
+        analysis_run_id: analysisRunId ?? null,
+      })
     });
   } catch (error) {
     if (error instanceof APIError && error.isNetworkError && process.env.NODE_ENV === "development") {
@@ -245,11 +250,21 @@ export async function getJobExplorationJobs(limit: number = 180): Promise<JobExp
   }
 }
 
-export async function generateReport(studentId: number, jobCode: string): Promise<ReportDraft> {
+export async function generateReport(
+  studentId: number,
+  jobCode: string,
+  context?: { analysis_run_id?: number | null; profile_version_id?: number | null; match_result_id?: number | null },
+): Promise<ReportDraft> {
   try {
     return await request<ReportDraft>("/reports/generate", {
       method: "POST",
-      body: JSON.stringify({ student_id: studentId, job_code: jobCode })
+      body: JSON.stringify({
+        student_id: studentId,
+        job_code: jobCode,
+        analysis_run_id: context?.analysis_run_id ?? null,
+        profile_version_id: context?.profile_version_id ?? null,
+        match_result_id: context?.match_result_id ?? null,
+      })
     });
   } catch (error) {
     if (error instanceof APIError && error.isNetworkError && process.env.NODE_ENV === "development") {
@@ -640,6 +655,37 @@ export async function getTeacherAdvice(): Promise<TeacherAdviceItem[]> {
   return res.data;
 }
 
+export type TeacherInfo = {
+  teacher_id: number;
+  user_id: number;
+  username: string;
+  full_name: string;
+  email: string;
+  department: string;
+  title: string;
+  student_count: number;
+};
+
+export type TeacherInfoInput = {
+  full_name: string;
+  email: string;
+  department: string;
+  title: string;
+};
+
+export async function getTeacherInfo(): Promise<TeacherInfo> {
+  const res = await request<{ data: TeacherInfo }>("/teacher/me");
+  return res.data;
+}
+
+export async function updateTeacherInfo(data: TeacherInfoInput): Promise<TeacherInfo> {
+  const res = await request<{ data: TeacherInfo }>("/teacher/me", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
 export type TeacherStudentReportListItem = {
   report_id: number;
   target_job: string;
@@ -865,6 +911,13 @@ export type AnalysisRunState = {
   failed_step: string;
   error_detail: string;
   step_results: Record<string, boolean>;
+  uploaded_file_ids?: number[];
+  resume_file_id?: number | null;
+  profile_version_id?: number | null;
+  target_job_code?: string | null;
+  match_result_id?: number | null;
+  path_recommendation_id?: number | null;
+  report_id?: number | null;
 };
 
 export async function startAnalysisRun(studentId: number, jobCode: string, fileIds: number[]): Promise<AnalysisRunState> {
@@ -880,6 +933,22 @@ export async function getAnalysisRun(runId: number): Promise<AnalysisRunState> {
 
 export async function getLatestAnalysis(): Promise<AnalysisRunState> {
   return request<AnalysisRunState>("/analysis/latest");
+}
+
+export async function updateAnalysisContext(
+  runId: number,
+  data: {
+    profile_version_id?: number | null;
+    target_job_code?: string | null;
+    match_result_id?: number | null;
+    path_recommendation_id?: number | null;
+    report_id?: number | null;
+  },
+): Promise<AnalysisRunState> {
+  return request<AnalysisRunState>(`/analysis/${runId}/context`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function markStepRunning(runId: number, stepKey: string): Promise<AnalysisRunState> {
