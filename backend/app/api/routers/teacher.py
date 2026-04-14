@@ -1,4 +1,7 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -23,6 +26,21 @@ from app.schemas.common import APIResponse
 router = APIRouter()
 
 
+class TeacherInfoUpdate(BaseModel):
+    full_name: str = Field(default="", max_length=100)
+    email: str = Field(default="", max_length=120)
+    department: str = Field(default="", max_length=100)
+    title: str = Field(default="", max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        email = value.strip()
+        if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValueError("邮箱格式不正确")
+        return email
+
+
 def _get_teacher_bound_student_ids(current_user: User, db: Session) -> list[int] | None:
     """Return list of student IDs bound to current teacher, or None if admin (no filter)."""
     if current_user.role == "admin":
@@ -39,6 +57,76 @@ def _get_teacher_bound_student_ids(current_user: User, db: Session) -> list[int]
         )
     ).all()
     return list(link_rows)
+
+
+def _ensure_teacher_can_access_student(current_user: User, db: Session, student_id: int) -> None:
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+    if bound_ids is not None and student_id not in bound_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该学生")
+
+
+def _teacher_info(current_user: User, db: Session) -> dict:
+    teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
+    if not teacher:
+        teacher = Teacher(user_id=current_user.id, department="", title="")
+        db.add(teacher)
+        db.commit()
+        db.refresh(teacher)
+
+    student_count = db.scalar(
+        select(func.count(TeacherStudentLink.id)).where(
+            TeacherStudentLink.teacher_id == teacher.id,
+            TeacherStudentLink.status == "active",
+        )
+    ) or 0
+
+    return {
+        "teacher_id": teacher.id,
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "department": teacher.department,
+        "title": teacher.title,
+        "student_count": student_count,
+    }
+
+
+@router.get("/me", response_model=APIResponse)
+def get_teacher_info(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有教师账号可以维护个人信息")
+    return APIResponse(data=_teacher_info(current_user, db))
+
+
+@router.put("/me", response_model=APIResponse)
+def update_teacher_info(
+    payload: TeacherInfoUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "teacher":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有教师账号可以维护个人信息")
+
+    teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
+    if not teacher:
+        teacher = Teacher(user_id=current_user.id, department="", title="")
+        db.add(teacher)
+        db.flush()
+
+    full_name = payload.full_name.strip()
+    if full_name:
+        current_user.full_name = full_name
+    current_user.email = payload.email.strip()
+    teacher.department = payload.department.strip()
+    teacher.title = payload.title.strip()
+
+    db.commit()
+    db.refresh(teacher)
+    return APIResponse(data=_teacher_info(current_user, db))
 
 
 @router.get("/students/reports", response_model=APIResponse)
@@ -391,6 +479,7 @@ def get_student_report_list(
     student = db.scalar(select(Student).where(Student.id == student_id))
     if not student:
         raise HTTPException(status_code=404, detail="学生不存在")
+    _ensure_teacher_can_access_student(current_user, db, student_id)
 
     reports = db.scalars(
         select(CareerReport)
@@ -435,6 +524,7 @@ def get_report_detail(
     report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
+    _ensure_teacher_can_access_student(current_user, db, report.student_id)
 
     student = db.scalar(select(Student).where(Student.id == report.student_id))
     user = db.scalar(select(User).where(User.id == student.user_id)) if student else None

@@ -8,6 +8,7 @@ import { getTeacherAdvice, updateFollowupStatus, type TeacherAdviceItem } from "
 
 const teacherNavItems = [
   { href: "/teacher", label: "首页", icon: <Icon name="home" size={18} /> },
+  { href: "/teacher/info", label: "个人信息", icon: <Icon name="user" size={18} /> },
   { href: "/teacher/reports", label: "学生报告查看", icon: <Icon name="clipboard" size={18} /> },
   { href: "/teacher/overview", label: "班级数据概览", icon: <Icon name="chart" size={18} /> },
   { href: "/teacher/advice", label: "指导建议", icon: <Icon name="chat" size={18} /> },

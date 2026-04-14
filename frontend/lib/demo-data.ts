@@ -29,6 +29,7 @@ export const demoStudentProfile = {
 export const demoMatching = {
   student_id: 1,
   job_code: "J-PM-001",
+  match_result_id: null as number | null,
   total_score: 85.6,
   weights: {
     basic_requirements: 0.15,

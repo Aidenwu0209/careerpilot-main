@@ -64,6 +64,13 @@ export default function LoginPage() {
 
       localStorage.setItem("token", token);
       localStorage.setItem("user_role", role);
+      if (data.user_id !== undefined && data.user_id !== null) {
+        localStorage.setItem("user_id", String(data.user_id));
+      }
+      if (data.username) {
+        localStorage.setItem("username", data.username);
+      }
+      localStorage.removeItem("chat_messages");
       setCookie("auth_token", token);
       setCookie("user_role", role);
 
@@ -158,6 +165,9 @@ export default function LoginPage() {
                   setCookie("user_role", activeRole);
                   localStorage.setItem("token", "dev-bypass");
                   localStorage.setItem("user_role", activeRole);
+                  localStorage.setItem("user_id", "dev-bypass");
+                  localStorage.setItem("username", `dev-${activeRole}`);
+                  localStorage.removeItem("chat_messages");
                   router.replace(roleRedirects[activeRole]);
                 }}
               >

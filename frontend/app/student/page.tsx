@@ -18,6 +18,7 @@ import {
   getGreeting,
   updateTargetJob,
   startAnalysisRun,
+  updateAnalysisContext,
   markStepRunning,
   markStepComplete,
   markStepFailed,
@@ -91,6 +92,13 @@ function getUserId(): number | null {
   }
 }
 
+function getAccountStorageKey(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  const userId = getUserId() ?? localStorage.getItem("user_id");
+  if (!userId) return null;
+  return `${name}:user:${userId}`;
+}
+
 function buildSteps(
   currentKey: string | null,
   errorKey: string | null,
@@ -123,6 +131,7 @@ export default function StudentMainPage() {
   const [query, setQuery] = useState("");
   const [showGuide, setShowGuide] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isDraggingUpload, setIsDraggingUpload] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileInfo[]>([]);
@@ -184,14 +193,25 @@ export default function StudentMainPage() {
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
+    if (!messagesLoaded) return;
+    const key = getAccountStorageKey("chat_messages");
+    if (!key) return;
     if (messages.length > 0) {
-      localStorage.setItem("chat_messages", JSON.stringify(messages));
+      localStorage.setItem(key, JSON.stringify(messages));
+    } else {
+      localStorage.removeItem(key);
     }
-  }, [messages]);
+  }, [messages, messagesLoaded]);
 
   // Load messages from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("chat_messages");
+    localStorage.removeItem("chat_messages");
+    const key = getAccountStorageKey("chat_messages");
+    if (!key) {
+      setMessagesLoaded(true);
+      return;
+    }
+    const saved = localStorage.getItem(key);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -200,7 +220,7 @@ export default function StudentMainPage() {
             (msg: ChatMessage) => typeof msg?.content === "string" && msg.content.includes("Mock 模式"),
           );
           if (hasMockNotice) {
-            localStorage.removeItem("chat_messages");
+            localStorage.removeItem(key);
           } else {
             setMessages(parsed);
           }
@@ -209,6 +229,7 @@ export default function StudentMainPage() {
         // Ignore invalid saved data
       }
     }
+    setMessagesLoaded(true);
   }, []);
 
   const runPipeline = useCallback(
@@ -222,6 +243,8 @@ export default function StudentMainPage() {
       let runId: number | null = null;
       // Track current step locally to avoid stale closure on pipelineCurrent
       let currentStep: string = "uploaded";
+      let profileVersionId: number | null = null;
+      let matchResultId: number | null = null;
 
       try {
         // Start backend analysis run
@@ -250,7 +273,11 @@ export default function StudentMainPage() {
         currentStep = "profiled";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
-        await generateStudentProfile(sid, fileIds);
+        const profile = await generateStudentProfile(sid, fileIds);
+        profileVersionId = profile.profile_version_id ?? null;
+        if (profileVersionId) {
+          await updateAnalysisContext(runId, { profile_version_id: profileVersionId });
+        }
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
@@ -258,7 +285,11 @@ export default function StudentMainPage() {
         currentStep = "matched";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
-        await getMatching(sid, jCode);
+        const matching = await getMatching(sid, jCode, profileVersionId, runId);
+        matchResultId = matching.match_result_id ?? null;
+        if (matchResultId) {
+          await updateAnalysisContext(runId, { match_result_id: matchResultId });
+        }
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
@@ -266,7 +297,17 @@ export default function StudentMainPage() {
         currentStep = "reported";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
-        const report = await generateReport(sid, jCode);
+        const report = await generateReport(sid, jCode, {
+          analysis_run_id: runId,
+          profile_version_id: profileVersionId,
+          match_result_id: matchResultId,
+        });
+        await updateAnalysisContext(runId, {
+          report_id: report.report_id,
+          profile_version_id: report.profile_version_id ?? profileVersionId,
+          match_result_id: report.match_result_id ?? matchResultId,
+          path_recommendation_id: report.path_recommendation_id,
+        });
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
         await markAnalysisComplete(runId);
@@ -669,6 +710,8 @@ export default function StudentMainPage() {
             <button
               className="chat-new-topic-btn"
               onClick={() => {
+                const key = getAccountStorageKey("chat_messages");
+                if (key) localStorage.removeItem(key);
                 localStorage.removeItem("chat_messages");
                 setMessages([]);
                 setQuery("");

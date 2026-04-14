@@ -8,6 +8,7 @@ import { Icon } from "@/components/Icon";
 
 const studentNavItems = [
   { href: "/student", label: "首页", icon: <Icon name="home" size={18} /> },
+  { href: "/student/info", label: "个人信息", icon: <Icon name="user" size={18} /> },
   { href: "/student/profile", label: "我的能力分析", icon: <Icon name="chart" size={18} /> },
   { href: "/student/recommended", label: "推荐岗位", icon: <Icon name="briefcase" size={18} /> },
   { href: "/student/matching", label: "岗位匹配分析", icon: <Icon name="target" size={18} /> },
@@ -19,6 +20,7 @@ const studentNavItems = [
 
 const titleMap: Record<string, string> = {
   "/student": "职航智策",
+  "/student/info": "个人信息",
   "/student/recommended": "推荐岗位",
   "/student/profile": "我的能力分析",
   "/student/matching": "岗位匹配分析",
@@ -49,6 +51,8 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user_role");
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("username");
     document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     document.cookie = "user_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     router.push("/login");
