@@ -84,8 +84,65 @@ export default function StudentPathPage() {
         <SectionCard title="加载中">
           <p style={{ textAlign: "center", padding: "40px", color: "#888" }}>加载中...</p>
         </SectionCard>
+      ) : !plan ? (
+        <SectionCard title="暂无路径数据">
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#888" }}>
+            <p style={{ margin: "0 0 8px", fontSize: "1rem" }}>请先完成画像生成和目标岗位确认</p>
+            <p style={{ margin: 0, fontSize: "0.875rem" }}>路径规划需要基于画像和目标岗位生成</p>
+          </div>
+        </SectionCard>
       ) : (
         <>
+          <SectionCard title="当前能力起点">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+              {/* 已匹配技能 */}
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.875rem", color: "var(--ink)" }}>已掌握技能</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {(plan.current_ability?.skills ?? []).map((skill: string) => (
+                    <span key={skill} style={{ padding: "4px 10px", borderRadius: 8, background: "#eef6ff", color: "#0f4f9a", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
+                  ))}
+                </div>
+                {(plan.current_ability?.skills?.length ?? 0) === 0 && (
+                  <span style={{ color: "var(--subtle)", fontSize: "0.8125rem" }}>暂无技能数据</span>
+                )}
+              </div>
+              {/* 匹配 / 缺失技能 */}
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.875rem", color: "var(--ink)" }}>技能差距</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {(plan.current_ability?.matched_skills ?? []).map((skill: string) => (
+                    <span key={skill} style={{ padding: "4px 10px", borderRadius: 8, background: "#f0fdf4", color: "#166534", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
+                  ))}
+                  {(plan.current_ability?.missing_skills ?? []).map((skill: string) => (
+                    <span key={skill} style={{ padding: "4px 10px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
+                  ))}
+                </div>
+                {(plan.current_ability?.matched_skills?.length ?? 0) === 0 && (plan.current_ability?.missing_skills?.length ?? 0) === 0 && (
+                  <span style={{ color: "var(--subtle)", fontSize: "0.8125rem" }}>暂无匹配数据</span>
+                )}
+              </div>
+              {/* 证书 & 项目 & 实习 */}
+              <div>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.875rem", color: "var(--ink)" }}>证书 / 项目 / 实习</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.8125rem", color: "var(--ink)" }}>
+                  {(plan.current_ability?.certificates ?? []).length > 0 && (
+                    <p style={{ margin: 0 }}><span style={{ color: "var(--subtle)" }}>证书：</span>{(plan.current_ability?.certificates ?? []).join("、")}</p>
+                  )}
+                  {(plan.current_ability?.projects ?? []).length > 0 && (
+                    <p style={{ margin: 0 }}><span style={{ color: "var(--subtle)" }}>项目：</span>{(plan.current_ability?.projects ?? []).join("、")}</p>
+                  )}
+                  {(plan.current_ability?.internships ?? []).length > 0 && (
+                    <p style={{ margin: 0 }}><span style={{ color: "var(--subtle)" }}>实习：</span>{(plan.current_ability?.internships ?? []).join("、")}</p>
+                  )}
+                  {!(plan.current_ability?.certificates ?? []).length && !(plan.current_ability?.projects ?? []).length && !(plan.current_ability?.internships ?? []).length && (
+                    <span style={{ color: "var(--subtle)", fontSize: "0.8125rem" }}>暂无数据</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+
           <SectionCard title="垂直岗位图谱">
             <p style={{ color: "var(--subtle)", margin: "0 0 20px", lineHeight: 1.7 }}>
               {plan?.vertical_graph?.description || plan?.rationale || "基于岗位图谱生成晋升链路。"}
@@ -328,6 +385,41 @@ export default function StudentPathPage() {
               </div>
             )}
           </SectionCard>
+
+          {(plan?.recommendations ?? []).length > 0 && (
+          <SectionCard title="成长建议与行动计划">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {(plan?.recommendations ?? []).map((rec: { phase?: string; focus?: string; items?: string[] }, idx: number) => (
+                <div key={idx} style={{ padding: 16, borderRadius: 8, background: rec.phase === "短期" ? "#f0fdf4" : "#eff6ff", border: `1px solid ${rec.phase === "短期" ? "#bbf7d0" : "#bfdbfe"}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <span style={{
+                      padding: "3px 10px",
+                      borderRadius: 6,
+                      background: rec.phase === "短期" ? "#16a34a" : "#2563eb",
+                      color: "#fff",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                    }}>{rec.phase || "计划"}</span>
+                    <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)" }}>{rec.focus}</span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {(rec.items ?? []).map((item) => (
+                      <span key={item} style={{
+                        padding: "4px 10px",
+                        borderRadius: 8,
+                        background: "#fff",
+                        color: "var(--ink)",
+                        fontSize: "0.8125rem",
+                        fontWeight: 500,
+                        border: "1px solid #e2e8f0",
+                      }}>{item}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+          )}
 
           <SectionCard title="路径依据">
             <p style={{ lineHeight: 1.8 }}>{plan?.rationale || "基于岗位图谱的晋升链路和转岗链路，结合学生当前技能覆盖情况生成主路径与备选路径。"}</p>
