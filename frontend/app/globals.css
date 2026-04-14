@@ -2553,6 +2553,145 @@ a[aria-label] {
   background: var(--success);
 }
 
+.student-info-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 56px;
+}
+
+.student-info-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: var(--shadow-sm);
+}
+
+.student-info-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.student-info-header h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.5rem;
+}
+
+.student-info-header p,
+.student-info-muted {
+  margin: 8px 0 0;
+  color: var(--subtle);
+  line-height: 1.7;
+}
+
+.student-info-account {
+  min-width: 160px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.student-info-account span {
+  display: block;
+  color: var(--subtle);
+  font-size: 0.75rem;
+  margin-bottom: 4px;
+}
+
+.student-info-account strong {
+  color: var(--ink);
+}
+
+.student-info-current-teacher {
+  padding: 12px 14px;
+  border: 1px solid #cfe0f5;
+  border-radius: 8px;
+  background: #f7fbff;
+  color: var(--ink);
+  margin-bottom: 20px;
+}
+
+.student-info-current-teacher--empty {
+  color: var(--subtle);
+}
+
+.student-info-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.student-info-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.student-info-form input,
+.student-info-form select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+
+.student-info-form input:focus,
+.student-info-form select:focus {
+  outline: none;
+  border-color: #0f74da;
+  box-shadow: 0 0 0 3px rgba(15, 116, 218, 0.12);
+}
+
+.student-info-alert {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.student-info-alert--error {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.student-info-alert--success {
+  color: #0b7b72;
+  background: rgba(11, 123, 114, 0.1);
+}
+
+.student-info-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.student-info-actions .btn-primary {
+  min-width: 140px;
+}
+
+@media (max-width: 720px) {
+  .student-info-header,
+  .student-info-form {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .student-info-account {
+    min-width: 0;
+  }
+}
+
 .admin-user-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -24,7 +24,9 @@ from app.models import (
     ProfileVersion,
     Student,
     StudentProfile,
+    Teacher,
     TeacherComment,
+    TeacherStudentLink,
     UploadedFile,
     User,
 )
@@ -36,6 +38,102 @@ from app.services.matching.recommendation import (
 from app.schemas.job import RecommendedJobItem, RecommendedJobsResponse
 
 router = APIRouter()
+
+
+class StudentInfoUpdate(BaseModel):
+    full_name: str = Field(default="", max_length=100)
+    email: str = Field(default="", max_length=120)
+    major: str = Field(default="", max_length=100)
+    grade: str = Field(default="", max_length=20)
+    career_goal: str = Field(default="", max_length=200)
+    teacher_code: str = Field(default="", max_length=120)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        import re
+
+        email = value.strip()
+        if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ValueError("邮箱格式不正确")
+        return email
+
+
+def _find_teacher_by_code(db: Session, teacher_code: str) -> Teacher | None:
+    code = teacher_code.strip()
+    if not code:
+        return None
+    return db.scalar(
+        select(Teacher)
+        .join(User, Teacher.user_id == User.id)
+        .where(User.role == "teacher")
+        .where((User.username == code) | (User.email == code))
+    )
+
+
+def _get_primary_teacher_info(db: Session, student_id: int) -> dict | None:
+    link = db.scalar(
+        select(TeacherStudentLink)
+        .where(
+            TeacherStudentLink.student_id == student_id,
+            TeacherStudentLink.status == "active",
+        )
+        .order_by(TeacherStudentLink.is_primary.desc(), TeacherStudentLink.id.desc())
+        .limit(1)
+    )
+    if not link:
+        return None
+
+    teacher = db.get(Teacher, link.teacher_id)
+    teacher_user = db.get(User, teacher.user_id) if teacher else None
+    if not teacher or not teacher_user:
+        return None
+    return {
+        "teacher_id": teacher.id,
+        "teacher_user_id": teacher_user.id,
+        "teacher_name": teacher_user.full_name,
+        "teacher_username": teacher_user.username,
+        "teacher_email": teacher_user.email,
+        "link_id": link.id,
+        "source": link.source,
+    }
+
+
+def _bind_student_to_teacher(db: Session, student: Student, teacher: Teacher) -> None:
+    existing = db.scalar(
+        select(TeacherStudentLink).where(
+            TeacherStudentLink.teacher_id == teacher.id,
+            TeacherStudentLink.student_id == student.id,
+        )
+    )
+
+    active_primary_links = db.scalars(
+        select(TeacherStudentLink).where(
+            TeacherStudentLink.student_id == student.id,
+            TeacherStudentLink.status == "active",
+            TeacherStudentLink.is_primary == True,
+        )
+    ).all()
+    for link in active_primary_links:
+        if link.teacher_id != teacher.id:
+            link.status = "inactive"
+            link.is_primary = False
+
+    if existing:
+        existing.status = "active"
+        existing.is_primary = True
+        existing.group_name = existing.group_name or "学生自助绑定"
+        existing.source = "student_profile"
+        return
+
+    db.add(TeacherStudentLink(
+        teacher_id=teacher.id,
+        student_id=student.id,
+        group_name="学生自助绑定",
+        is_primary=True,
+        source="student_profile",
+        status="active",
+    ))
 
 
 def resolve_target_job(db: Session, student: Student) -> tuple[str, str]:
@@ -92,6 +190,9 @@ def get_current_student(
         return {
             "student_id": None,
             "user_id": current_user.id,
+            "username": current_user.username,
+            "full_name": current_user.full_name,
+            "email": current_user.email,
             "major": "",
             "grade": "",
             "career_goal": "",
@@ -99,6 +200,9 @@ def get_current_student(
             "target_job_title": "",
             "suggested_job_code": None,
             "suggested_job_title": None,
+            "resolved_job_code": "",
+            "resolved_job_title": "",
+            "teacher": None,
         }
 
     suggested_job_code = None
@@ -118,6 +222,9 @@ def get_current_student(
     return {
         "student_id": student.id,
         "user_id": current_user.id,
+        "username": current_user.username,
+        "full_name": current_user.full_name,
+        "email": current_user.email,
         "major": student.major,
         "grade": student.grade,
         "career_goal": student.career_goal,
@@ -127,7 +234,43 @@ def get_current_student(
         "suggested_job_title": suggested_job_title,
         "resolved_job_code": resolved_code,
         "resolved_job_title": resolved_title,
+        "teacher": _get_primary_teacher_info(db, student.id),
     }
+
+
+@router.put("/me")
+def update_current_student(
+    payload: StudentInfoUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    if current_user.role != "student":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有学生账号可以维护个人信息")
+
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        student = Student(user_id=current_user.id)
+        db.add(student)
+        db.flush()
+
+    full_name = payload.full_name.strip()
+    if full_name:
+        current_user.full_name = full_name
+    current_user.email = payload.email.strip()
+    student.major = payload.major.strip()
+    student.grade = payload.grade.strip()
+    student.career_goal = payload.career_goal.strip()
+
+    teacher_code = payload.teacher_code.strip()
+    if teacher_code:
+        teacher = _find_teacher_by_code(db, teacher_code)
+        if not teacher:
+            raise HTTPException(status_code=400, detail="未找到对应老师，请填写老师用户名或邮箱")
+        _bind_student_to_teacher(db, student, teacher)
+
+    db.commit()
+    db.refresh(student)
+    return get_current_student(current_user=current_user, db=db)
 
 
 class TargetJobRequest(BaseModel):

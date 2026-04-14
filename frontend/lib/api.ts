@@ -28,6 +28,9 @@ export type ReportDraft = {
 export type StudentSession = {
   student_id: number | null;
   user_id: number;
+  username: string;
+  full_name: string;
+  email: string;
   major: string;
   grade: string;
   career_goal: string;
@@ -37,6 +40,24 @@ export type StudentSession = {
   suggested_job_title: string | null;
   resolved_job_code: string;
   resolved_job_title: string;
+  teacher: {
+    teacher_id: number;
+    teacher_user_id: number;
+    teacher_name: string;
+    teacher_username: string;
+    teacher_email: string;
+    link_id: number;
+    source: string;
+  } | null;
+};
+
+export type StudentInfoInput = {
+  full_name: string;
+  email: string;
+  major: string;
+  grade: string;
+  career_goal: string;
+  teacher_code?: string;
 };
 
 export class APIError extends Error {
@@ -118,6 +139,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getStudentSession(): Promise<StudentSession> {
   return request<StudentSession>("/students/me");
+}
+
+export async function updateStudentInfo(data: StudentInfoInput): Promise<StudentSession> {
+  return request<StudentSession>("/students/me", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function updateTargetJob(jobCode: string, jobTitle: string): Promise<{ ok: boolean; target_job_code: string; target_job_title: string; analysis_run_id: number | null }> {
