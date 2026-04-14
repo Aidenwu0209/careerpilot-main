@@ -6,7 +6,6 @@ thereby seeding demo users and 35 simulated students via initialize_demo_data().
 import pytest
 from sqlalchemy import func, select
 
-from app.api.deps import create_access_token
 from app.models import (
     AnalysisRun,
     CareerReport,
@@ -16,6 +15,7 @@ from app.models import (
     Student,
     StudentProfile,
     UploadedFile,
+    User,
 )
 from app.services.seed_demo_students import _STUDENT_TEMPLATES
 
@@ -23,7 +23,13 @@ from app.services.seed_demo_students import _STUDENT_TEMPLATES
 @pytest.fixture()
 def teacher_client(client):
     """Provide a client with teacher auth headers."""
-    token = create_access_token(data={"sub": "2"})
+    # Login as teacher to get a valid JWT token
+    resp = client.post("/api/v1/auth/login", json={
+        "username": "teacher_demo",
+        "password": "demo123",
+    })
+    assert resp.status_code == 200, f"Login failed: {resp.json()}"
+    token = resp.json()["access_token"]
     client.teacher_headers = {"Authorization": f"Bearer {token}"}
     return client
 
@@ -118,14 +124,21 @@ class TestSeedDemoStudents:
         assert count >= 25
 
     def test_match_results_have_dimension_scores(self, seeded_db):
-        match_ids = seeded_db.scalars(select(MatchResult.id)).all()
+        # Only check match results created by seed (linked to demo students)
+        demo_student_ids = seeded_db.scalars(
+            select(Student.id).join(User).where(User.username.like("demo_student_%"))
+        ).all()
+        match_ids = seeded_db.scalars(
+            select(MatchResult.id).where(MatchResult.student_id.in_(demo_student_ids))
+        ).all()
+        assert len(match_ids) >= 25, f"Expected >= 25 seeded match results, got {len(match_ids)}"
         for mid in match_ids:
             dim_count = seeded_db.scalar(
                 select(func.count(MatchDimensionScore.id)).where(
                     MatchDimensionScore.match_result_id == mid
                 )
             )
-            assert dim_count == 4
+            assert dim_count == 4, f"MatchResult {mid} has {dim_count} dimensions, expected 4"
 
     def test_analysis_runs_created(self, seeded_db):
         count = seeded_db.scalar(
@@ -136,10 +149,17 @@ class TestSeedDemoStudents:
         assert count >= 25
 
     def test_reports_have_markdown_content(self, seeded_db):
-        reports = seeded_db.scalars(
-            select(CareerReport).where(CareerReport.markdown_content != "")
+        # Only check reports created by seed (linked to demo students)
+        demo_student_ids = seeded_db.scalars(
+            select(Student.id).join(User).where(User.username.like("demo_student_%"))
         ).all()
-        assert len(reports) >= 20
+        reports = seeded_db.scalars(
+            select(CareerReport).where(
+                CareerReport.student_id.in_(demo_student_ids),
+                CareerReport.markdown_content != "",
+            )
+        ).all()
+        assert len(reports) >= 20, f"Expected >= 20 seeded reports, got {len(reports)}"
         for r in reports:
             assert "职业规划报告" in r.markdown_content
 
