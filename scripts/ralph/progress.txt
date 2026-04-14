@@ -4,7 +4,7 @@
 - Source PRD: tasks/prd-careerpilot-platform-optimization.md
 - Created: 2026-04-14
 - Total Stories: 38
-- Completed Stories: 7
+- Completed Stories: 8
 
 ## Codebase Patterns
 - 后端使用 FastAPI + SQLAlchemy 2.0（Mapped/mapped_column 声明式）+ SQLite/PostgreSQL
@@ -279,4 +279,23 @@
   - MatchingService.analyze_match 现在返回 match_result_id，下游 service 可直接使用
   - PathRecommendation 已有 profile_version_id、match_result_id、analysis_run_id 绑定字段，与 MatchResult 模式一致
   - 已有 3 个 pre-existing integration failures（auth 401），与本次改动无关
+---
+
+## 2026-04-14 18:30 - US-013
+- 实现了职业路径页图谱化结果渲染增强
+  - 前端：新增"当前能力起点"区块，展示已掌握技能、技能差距（匹配/缺失用绿色/红色标签区分）、证书/项目/实习
+  - 前端：新增"成长建议与行动计划"区块，按短期/中期分色展示推荐计划（绿色=短期，蓝色=中期）
+  - 前端：新增 plan 为 null 时的空状态提示，引导用户先完成画像和目标岗位确认
+  - 前端：垂直岗位图谱和换岗路径图谱已有完整实现（时间轴节点 + 角色路径 + 技能桥接），无需额外修改
+  - Demo 数据：`demoPath` 新增 `current_ability`、`gaps`、`certificate_recommendations`、`learning_resources`、`evaluation_metrics` 字段
+  - 测试：TypeScript typecheck 通过，185 个后端单元测试全部通过
+- 更改的文件：
+  - `frontend/app/student/path/page.tsx` — 新增当前能力起点、成长建议区块、空状态处理
+  - `frontend/lib/demo-data.ts` — demoPath 新增 current_ability 等字段
+- **未来迭代的学习：**
+  - `PathPlan` 类型通过 `typeof demoPath` 推导，添加 demo 字段即自动扩展类型
+  - 后端 `CareerPathService.plan_path` 返回完整的 `current_ability` 对象，含 skills/certificates/projects/internships/matched_skills/missing_skills/capability_scores
+  - 后端 `_path_to_dict` 在 router 层负责 backward compatibility，旧记录（只有 primary_path_json）会自动构建最小图谱
+  - 路径页已有的垂直图谱使用 timeline rail 设计，换岗图谱使用 role node + path card 设计，是成熟的图谱化展示模式
+  - 需要手动浏览器验证：当前能力起点区块、成长建议区块、空状态
 ---
