@@ -376,6 +376,22 @@ class ReportService:
             raise ValueError("报告不存在")
         return report
 
+    def save_report(self, db: Session, report_id: int, markdown_content: str) -> None:
+        report = self.get_report(db, report_id)
+        report.markdown_content = markdown_content
+        report.status = "edited"
+        version_count = len(list(db.scalars(select(ReportVersion).where(ReportVersion.report_id == report.id)).all()))
+        db.add(
+            ReportVersion(
+                report_id=report.id,
+                version_no=version_count + 1,
+                content_json=report.content_json,
+                markdown_content=markdown_content,
+                editor_notes="手动保存",
+            )
+        )
+        db.commit()
+
     async def polish_report(self, db: Session, report_id: int, markdown_content: str) -> dict:
         report = self.get_report(db, report_id)
         polished = await self.llm_provider.polish_markdown(markdown_content)
@@ -399,12 +415,20 @@ class ReportService:
             "content": report.content_json,
             "markdown_content": polished,
             "status": report.status,
+            "path_recommendation_id": report.path_recommendation_id,
+            "profile_version_id": report.profile_version_id,
+            "match_result_id": report.match_result_id,
+            "analysis_run_id": report.analysis_run_id,
         }
 
     def check_completeness(self, db: Session, report_id: int) -> dict:
         try:
             report = self.get_report(db, report_id)
-            missing = [section for section in self.REQUIRED_SECTIONS if section not in report.content_json]
+            missing = []
+            for section in self.REQUIRED_SECTIONS:
+                section_data = report.content_json.get(section)
+                if not section_data or (isinstance(section_data, dict) and not section_data):
+                    missing.append(section)
             suggestions = []
             if "matching_analysis" in missing:
                 suggestions.append("补充人岗匹配分析。")
@@ -414,6 +438,8 @@ class ReportService:
                 suggestions.append("补充短期、中期行动计划。")
             if "evaluation_cycle" in missing:
                 suggestions.append("补充评估周期与指标。")
+            if "teacher_comments" in missing:
+                suggestions.append("教师建议区域待补充（可由教师点评后生成）。")
             return {
                 "report_id": report_id,
                 "is_complete": len(missing) == 0,

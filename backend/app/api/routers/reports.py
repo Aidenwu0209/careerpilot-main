@@ -136,12 +136,11 @@ def save_report(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
     try:
-        report = container.report_service.get_report(db, payload.report_id)
+        container.report_service.save_report(db, payload.report_id, payload.markdown_content)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在，请先生成报告")
-    report.markdown_content = payload.markdown_content
-    report.status = "edited"
-    db.commit()
+
+    report = container.report_service.get_report(db, payload.report_id)
     return {
         "report_id": report.id,
         "status": report.status,
