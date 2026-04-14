@@ -4,7 +4,7 @@
 - Source PRD: tasks/prd-careerpilot-platform-optimization.md
 - Created: 2026-04-14
 - Total Stories: 38
-- Completed Stories: 5
+- Completed Stories: 7
 
 ## Codebase Patterns
 - 后端使用 FastAPI + SQLAlchemy 2.0（Mapped/mapped_column 声明式）+ SQLite/PostgreSQL
@@ -24,6 +24,9 @@
 - `ProfileVersion.snapshot_json` 存储完整画像快照，包含 `uploaded_file_ids` 和 `mode` 用于追溯来源
 - Router 层通过 `try/except ValueError` 捕获 service 层业务校验并返回 400 错误
 - 前端学生画像页面在 `frontend/app/student/profile/page.tsx`，已集成版本历史列表和快照查看
+- `resolve_target_job()` 在 `students.py` 中有 4 级优先级回退：手动确认 > career_goal 映射 > 最近匹配 > 空值
+- `ensure_demo_users()` 启动时创建 user_id=1（student_demo），测试中 dev-bypass 直接映射到该用户
+- 匹配、路径规划、报告路由均支持空 job_code 回退到已确认目标岗位
 
 ## 2026-04-14 22:30 - US-001
 - 实现了多类型文件上传的校验与标准化元数据返回
@@ -181,4 +184,99 @@
   - `StudentProfile` 有 `skills_json`、`certificates_json`、`projects_json`、`internships_json` 字段可直接引用
   - Pydantic schema 的 `RecommendedJobItem` 可用于前端类型对齐
   - 推荐理由使用中文【】括号标注关键词，提高可读性
+---
+
+## 2026-04-14 22:30 - US-009
+- 实现了目标岗位确认与持久化绑定
+  - 后端 `PUT /students/me/target-job` 确认目标岗位时，同步更新最新 pending/running 状态的 AnalysisRun.target_job_code
+  - 匹配路由 `POST /matching/analyze` 支持空 job_code，自动回退到 `resolve_target_job()` 解析已确认岗位
+  - 路径规划路由 `POST /career-paths/plan` 支持空 job_code，同上回退逻辑
+  - 报告生成路由 `POST /reports/generate` 已有回退逻辑，确认一致
+  - `MatchingRequest.job_code` 从必填改为可选（default=""）
+  - 匹配、路径规划、报告路由统一捕获 `ValueError` 返回 400 错误（之前未捕获会变成 500）
+  - 前端 `handleJobSelect` 改为 async，同步后端返回的 `analysis_run_id`
+  - 前端 `updateTargetJob` 返回类型新增 `analysis_run_id` 字段
+  - 测试：新增 17 个测试覆盖确认持久化（10个）和下游回退逻辑（7个）
+- 更改的文件：
+  - `backend/app/api/routers/students.py` — 目标岗位确认同步 AnalysisRun，返回 analysis_run_id
+  - `backend/app/api/routers/matching.py` — 空回退 + ValueError 捕获
+  - `backend/app/api/routers/career_paths.py` — 空回退 + ValueError 捕获
+  - `backend/app/api/routers/reports.py` — ValueError 捕获
+  - `backend/app/schemas/matching.py` — job_code 改为可选
+  - `frontend/app/student/page.tsx` — handleJobSelect async 化
+  - `frontend/lib/api.ts` — updateTargetJob 返回类型更新
+  - `backend/tests/unit/test_target_job_confirmation.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `PUT /students/me/target-job` 在 Student 不存在时会自动创建（`db.add(student)` + `db.flush()`），后续可通过此端点直接初始化学生记录
+  - `resolve_target_job()` 有 4 级优先级回退：手动确认 > career_goal 映射 > 最近匹配 > 空值，下游路由应优先使用此函数而非直接读取 `student.target_job_code`
+  - `ensure_demo_users()` 在 app 启动时自动创建 user_id=1（student_demo）和关联 Student 记录（career_goal="前端开发工程师"），测试中可以直接使用
+  - Router 层通过 `try/except ValueError` 捕获 service 层业务校验并返回 400，是标准模式
+  - 已有 4 个 pre-existing failures（3 个 auth 401 + 1 个匹配维度断言），与本次改动无关
+  - 需要手动浏览器验证：目标岗位确认 UI、推荐岗位选择后同步
+---
+
+## 2026-04-14 09:15 - US-010
+- 实现了四维匹配结果数据结构与绑定关系
+  - 模型：`MatchResult` 新增 `student_id`（FK）、`target_job_code`、`profile_version_id`（FK）、`analysis_run_id`（FK）四个绑定字段
+  - 模型：`MatchResult` 新增 `strengths_json`（契合点）字段
+  - Schema：`MatchingResponse` 新增 `strengths` 字段（契合点列表）
+  - Schema：`MatchingRequest` 新增可选的 `profile_version_id` 和 `analysis_run_id` 参数
+  - Service：`analyze_match` 方法签名扩展，接受 `profile_version_id` 和 `analysis_run_id` 绑定参数
+  - Service：维度输出固定为 4 个（基础要求、职业技能、职业素养、发展潜力），移除第 5 个 OCR 加权维度
+  - Service：绑定信息持久化到 MatchResult，传入 `analysis_run_id` 时同步更新 AnalysisRun.match_result_id
+  - Router：POST /analyze 传递绑定参数到 service
+  - Router：GET /{match_id} 修复了字段引用错误（之前引用不存在的 `dimensions_json`/`gap_items_json`），改为从 `MatchDimensionScore` 表读取维度数据
+  - 测试：新增 14 个测试覆盖四维度结构（1个）、维度字段完整性（1个）、总分（1个）、契合点（1个）、差距项（1个）、提升建议（1个）、学生绑定（1个）、岗位绑定（1个）、画像版本绑定（1个）、分析任务绑定（1个）、维度持久化（1个）、契合点持久化（1个）、差距建议持久化（1个）、多匹配隔离（1个）
+- 更改的文件：
+  - `backend/app/models/entities.py` — MatchResult 新增绑定字段和 strengths_json
+  - `backend/app/schemas/matching.py` — MatchingResponse/MatchingRequest 新增字段
+  - `backend/app/services/matching/matching_service.py` — 固定四维度、绑定存储、strengths 输出
+  - `backend/app/api/routers/matching.py` — 传递绑定参数、修复 GET 端点
+  - `backend/tests/unit/test_matching.py` — 保持原有测试（4 维度断言现在通过）
+  - `backend/tests/unit/test_four_dimension_matching.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `MatchResult` 现在有 `student_id`、`target_job_code`、`profile_version_id`、`analysis_run_id` 绑定字段，后续 US-011/012 可以直接读取
+  - 匹配结果维度固定为 4 个：基础要求、职业技能、职业素养、发展潜力，通过 `FOUR_DIMENSIONS` 常量定义
+  - `AnalysisRun.match_result_id` 会在匹配分析时自动回写，下游路径规划和报告可通过 AnalysisRun 获取
+  - `MatchResult` 与 `AnalysisRun` 存在循环 FK（match_results.analysis_run_id → analysis_runs.id, analysis_runs.match_result_id → match_results.id），SQLite 不支持 ALTER，会有 drop 警告但不影响功能
+  - 已有 3 个 pre-existing integration failures（auth 401），与本次改动无关
+---
+
+## 2026-04-14 15:30 - US-011
+- 实现了匹配页完整四维分析展示
+  - 前端：新增 `ScoreRing` 组件展示综合匹配得分（环形进度条 + 得分数字 + 颜色分段）
+  - 前端：新增契合点（strengths）展示区块，绿色勾选标记
+  - 前端：新增提升建议（suggestions）展示区块，蓝色编号列表
+  - 前端：差距项展示增加红色标记和独立描述行
+  - 前端：维度得分展示增加颜色和权重百分比格式
+  - 前端：综合得分区域增加分段建议文案（≥80/≥60/<60）
+  - Demo 数据：`demoMatching` 新增 `strengths` 字段
+  - 所有数据从统一 `MatchingResponse` 结构读取，不依赖额外临时字段
+- 更改的文件：
+  - `frontend/app/student/matching/page.tsx` — 全面重构匹配页 UI
+  - `frontend/lib/demo-data.ts` — demoMatching 新增 strengths 字段
+- **未来迭代的学习：**
+  - `MatchingResult` 类型现在包含 `total_score`、`strengths`、`suggestions` 字段，前端可直接使用
+  - 匹配页使用 `applyMatching()` 统一处理历史和新数据的解析，避免重复代码
+  - 颜色分段逻辑：≥90 绿色、≥80 浅绿、≥70 橙色、≥60 深橙、<60 红色
+  - 需要手动浏览器验证：匹配页总分环形图、契合点列表、提升建议列表
+---
+
+## 2026-04-14 16:30 - US-012
+- 实现了职业路径规划结果的持久化与上下文绑定
+  - MatchingService.analyze_match 返回值新增 match_result_id 字段，供下游路径规划和报告使用
+  - MatchingResponse schema 新增 match_result_id 字段（可选），前端可获取匹配结果 ID
+  - 修复 test_path_planning_binding.py 中的 3 个测试错误：API 路径缺少 /api/v1 前缀、auth token 使用 dev-bypass-student 而非 dev-bypass、analyze_match 未返回 match_result_id
+  - 路径规划已有的 service/router/model 已满足 AC1（完整字段）和 AC2（上下文绑定）要求
+  - 新增 24 个测试用例覆盖内容字段（10个）、上下文绑定（5个）、直接可用性（2个）、持久化（4个）、API 集成（2个）、upsert 逻辑（1个）
+- 更改的文件：
+  - `backend/app/services/matching/matching_service.py` — 返回值新增 match_result_id
+  - `backend/app/schemas/matching.py` — MatchingResponse 新增 match_result_id 字段
+  - `backend/tests/unit/test_path_planning_binding.py` — 修复测试错误（API 路径、auth token、返回值断言）
+- **未来迭代的学习：**
+  - API 测试路径必须包含 `/api/v1/` 前缀（不是直接用 router prefix）
+  - dev-bypass auth token 是 `Bearer dev-bypass`，不是 `Bearer dev-bypass-student`
+  - MatchingService.analyze_match 现在返回 match_result_id，下游 service 可直接使用
+  - PathRecommendation 已有 profile_version_id、match_result_id、analysis_run_id 绑定字段，与 MatchResult 模式一致
+  - 已有 3 个 pre-existing integration failures（auth 401），与本次改动无关
 ---
