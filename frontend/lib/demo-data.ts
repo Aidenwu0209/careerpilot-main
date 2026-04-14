@@ -3,6 +3,8 @@ export const demoStudentProfile = {
   source_summary: "简历、证书、手动录入",
   skills: ["需求分析", "原型设计", "SQL", "Python", "Excel", "PPT", "数据可视化", "沟通协调"],
   certificates: ["英语六级", "PMP 项目管理认证"],
+  projects: ["校园电商平台产品设计方案"],
+  internships: ["某互联网公司产品实习生"],
   capability_scores: {
     专业技能: 82,
     创新能力: 79,
@@ -20,7 +22,8 @@ export const demoStudentProfile = {
   evidence: [
     { source: "resume.pdf", excerpt: "实习经历：某互联网公司产品实习生，负责需求分析和原型设计", confidence: 0.92 },
     { source: "手动录入", excerpt: "补充项目：校园电商平台产品设计方案", confidence: 0.95 }
-  ]
+  ],
+  profile_version_id: null as number | null
 };
 
 export const demoMatching = {
@@ -43,6 +46,7 @@ export const demoMatching = {
     { type: "skill", name: "数据分析", suggestion: "加强 SQL 和数据可视化工具的实践应用。" },
     { type: "skill", name: "技术理解力", suggestion: "建议了解基础的前端和后端技术架构。" }
   ],
+  strengths: ["需求分析能力突出，具备完整的需求文档撰写经验", "原型设计工具熟练，能独立产出交互方案", "沟通协调能力强，多次跨部门协作经验", "学习能力与适应性好，快速掌握新领域知识"],
   suggestions: ["完善 1 个完整的产品从 0 到 1 案例", "加强跨部门协作经验表达", "定期复盘产品方法论积累"],
   summary: "适合优先冲刺产品经理岗位，优势在于需求分析和沟通协调能力，短板在数据分析深度与技术理解力。"
 };
@@ -100,10 +104,33 @@ export const demoPath = {
     ],
   },
   rationale: "依据岗位图谱、技能相邻度与学生当前能力结构推荐。",
+  current_ability: {
+    skills: ["需求分析", "原型设计", "SQL", "Python", "Excel", "PPT", "数据可视化", "沟通协调"],
+    certificates: ["英语六级", "PMP 项目管理认证"],
+    projects: ["校园电商平台产品设计方案"],
+    internships: ["某互联网公司产品实习生"],
+    capability_scores: { 专业技能: 82, 创新能力: 79, 学习能力: 85, 抗压能力: 74, 沟通能力: 88, 实习能力: 76 },
+    matched_skills: ["需求分析", "项目管理", "沟通协调", "PPT"],
+    missing_skills: ["数据分析", "技术理解力", "商业分析", "用户研究"],
+  },
+  gaps: [
+    { stage: "当前岗位", missing_skills: ["数据分析", "商业分析", "用户研究"] },
+  ],
   recommendations: [
     { phase: "短期", focus: "补齐数据分析与技术理解能力", items: ["SQL", "数据可视化", "基础技术架构"] },
     { phase: "中期", focus: "形成完整产品案例和跨部门协作经验", items: ["实习", "产品案例", "复盘"] }
-  ]
+  ],
+  certificate_recommendations: [
+    { name: "NPDP 产品经理认证", priority: "高", reason: "目标岗位 产品经理 建议持有 NPDP 产品经理认证" },
+  ],
+  learning_resources: [
+    { type: "技能", name: "数据分析", suggestion: "通过在线课程或项目实践提升 数据分析 技能", phase: "短期" },
+    { type: "技能", name: "技术理解力", suggestion: "通过在线课程或项目实践提升 技术理解力 技能", phase: "短期" },
+  ],
+  evaluation_metrics: [
+    { phase: "短期", metric: "技能覆盖率提升", target: "短期内掌握 SQL, 数据可视化", evaluation_method: "技能自评 + 项目实践验证" },
+    { phase: "中期", metric: "项目/实习成果达成", target: "中期内完成 实习, 产品案例", evaluation_method: "实习反馈 + 阶段复盘" },
+  ],
 };
 
 export type JobCategory = "产品/技术" | "设计/创意" | "运营/市场" | "金融/商务" | "人力/行政" | "教育/咨询";

@@ -237,3 +237,81 @@ def score_recommended_job(
             "development_potential": {"score": potential_score, "evidence": potential_evidence},
         },
     }
+
+
+def generate_recommendation_reason(
+    *,
+    scoring: dict,
+    student_profile: StudentProfile | None = None,
+    student_info: dict | None = None,
+    job_profile: JobProfile | None = None,
+    experience: dict | None = None,
+) -> str:
+    """Generate a standardized recommendation reason referencing real evidence.
+
+    The reason references: profile skills, target job intent, professional
+    background (major/grade), project experience, and skill tags.
+    """
+    parts: list[str] = []
+
+    matched_skills = scoring.get("matched_skills", [])
+    missing_skills = scoring.get("missing_skills", [])
+    matched_certs = scoring.get("matched_certificates", [])
+    experience_tags = scoring.get("experience_tags", [])
+    intent_tags = scoring.get("intent_tags", [])
+
+    # 1. Professional background (major)
+    major = (student_info or {}).get("major", "")
+    job_title = ""
+    if job_profile:
+        job_title = getattr(job_profile, "title", "") or ""
+    if major and job_title:
+        parts.append(f"你的专业【{major}】与目标岗位【{job_title}】方向相关")
+
+    # 2. Skill tag evidence
+    all_matched = list(dict.fromkeys(matched_skills + experience_tags))
+    if all_matched:
+        skill_str = "、".join(all_matched[:5])
+        parts.append(f"已掌握【{skill_str}】等核心技能标签")
+
+    # 3. Project / internship experience
+    projects: list[str] = []
+    internships: list[str] = []
+    if experience:
+        projects = [p for p in experience.get("projects", []) if len(p) > 2]
+        internships = [p for p in experience.get("internships", []) if len(p) > 2]
+    if projects:
+        proj_str = "、".join(projects[:2])
+        parts.append(f"项目经验中包含【{proj_str}】等实践")
+    if internships:
+        int_str = "、".join(internships[:2])
+        parts.append(f"实习经历中包含【{int_str}】等经验")
+
+    # 4. Target job intent alignment
+    if intent_tags:
+        intent_str = "、".join(intent_tags)
+        parts.append(f"意向岗位【{intent_str}】与推荐岗位方向一致")
+
+    # 5. Certificate evidence
+    if matched_certs:
+        cert_str = "、".join(matched_certs[:3])
+        parts.append(f"已具备【{cert_str}】等相关证书")
+
+    # 6. Key gaps (concise)
+    if missing_skills:
+        gap_str = "、".join(missing_skills[:3])
+        parts.append(f"建议补强【{gap_str}】等技能")
+
+    if not parts:
+        # Fallback
+        score = scoring.get("score", 0)
+        if score >= 80:
+            return f"综合匹配度较高（{score}分），推荐作为重点考虑方向。"
+        elif score >= 60:
+            return f"综合匹配度为{score}分，可作为发展方向参考。"
+        else:
+            return "该岗位可作为探索方向，建议持续提升相关技能。"
+
+    # Join parts with Chinese commas
+    reason = "，".join(parts) + "。"
+    return reason

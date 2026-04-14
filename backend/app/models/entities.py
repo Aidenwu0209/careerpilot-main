@@ -174,6 +174,8 @@ class StudentProfile(TimestampMixin, Base):
     source_summary: Mapped[str] = mapped_column(Text, default="")
     skills_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     certificates_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    projects_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    internships_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     capability_scores: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     completeness_score: Mapped[float] = mapped_column(Float, default=0.0)
     competitiveness_score: Mapped[float] = mapped_column(Float, default=0.0)
@@ -200,8 +202,14 @@ class MatchResult(TimestampMixin, Base):
     job_profile_id: Mapped[int] = mapped_column(ForeignKey("job_profiles.id"), index=True)
     total_score: Mapped[float] = mapped_column(Float, default=0.0)
     summary: Mapped[str] = mapped_column(Text, default="")
+    strengths_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     gaps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     suggestions_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Binding fields — link match result to student, job, profile version and analysis run
+    student_id: Mapped[Optional[int]] = mapped_column(ForeignKey("students.id"), nullable=True, index=True)
+    target_job_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True, index=True)
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
 
 
 class MatchDimensionScore(TimestampMixin, Base):
@@ -238,6 +246,15 @@ class PathRecommendation(TimestampMixin, Base):
     transition_graph_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     gaps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     recommendations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Enriched content fields
+    current_ability_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    certificate_recommendations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    learning_resources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    evaluation_metrics_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Context binding fields
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    match_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("match_results.id"), nullable=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
 
 
 class GrowthTask(TimestampMixin, Base):
@@ -271,6 +288,10 @@ class CareerReport(TimestampMixin, Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
     target_job_code: Mapped[str] = mapped_column(String(80), index=True)
     path_recommendation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("path_recommendations.id"), nullable=True)
+    # Context binding fields — link report to profile version, match result, and analysis run
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    match_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("match_results.id"), nullable=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
     content_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     markdown_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(40), default="draft")
@@ -338,6 +359,8 @@ class ChatMessageRecord(TimestampMixin, Base):
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
     has_context: Mapped[bool] = mapped_column(Boolean, default=False)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
 
 
 class ProfileVersion(TimestampMixin, Base):
@@ -347,7 +370,11 @@ class ProfileVersion(TimestampMixin, Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
     version_no: Mapped[int] = mapped_column(Integer, default=1)
     source_files: Mapped[str] = mapped_column(Text, default="")
+    uploaded_file_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    file_summaries_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    evidence_snapshot_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
 
 
 class AnalysisRun(TimestampMixin, Base):
@@ -362,6 +389,15 @@ class AnalysisRun(TimestampMixin, Base):
     step_results: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     # step_results stores completion info: {"uploaded": true, "parsed": true, ...}
 
+    # Context binding fields — each analysis run explicitly tracks its input and output resources
+    uploaded_file_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    resume_file_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_files.id"), nullable=True)
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    target_job_code: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    match_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("match_results.id"), nullable=True)
+    path_recommendation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("path_recommendations.id"), nullable=True)
+    report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("career_reports.id"), nullable=True)
+
 
 class HistoryTitle(TimestampMixin, Base):
     __tablename__ = "history_titles"
@@ -371,3 +407,29 @@ class HistoryTitle(TimestampMixin, Base):
     record_type: Mapped[str] = mapped_column(String(40))
     ref_id: Mapped[int] = mapped_column(Integer)
     custom_title: Mapped[str] = mapped_column(String(200), default="")
+
+
+class TeacherComment(TimestampMixin, Base):
+    __tablename__ = "teacher_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("career_reports.id"), index=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
+    comment: Mapped[str] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
+    visible_to_student: Mapped[bool] = mapped_column(Boolean, default=True)
+    student_read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class TeacherStudentLink(TimestampMixin, Base):
+    __tablename__ = "teacher_student_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("teachers.id"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    group_name: Mapped[str] = mapped_column(String(100), default="")
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(60), default="manual")  # manual, invite_code, batch_import
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active, inactive

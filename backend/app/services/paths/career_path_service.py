@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -91,7 +92,15 @@ class CareerPathService:
     def __init__(self, graph_query_service: GraphQueryService) -> None:
         self.graph_query_service = graph_query_service
 
-    async def plan_path(self, db: Session, student_id: int, job_code: str) -> dict:
+    async def plan_path(
+        self,
+        db: Session,
+        student_id: int,
+        job_code: str,
+        profile_version_id: int | None = None,
+        match_result_id: int | None = None,
+        analysis_run_id: int | None = None,
+    ) -> dict:
         try:
             student_profile = db.scalar(select(StudentProfile).where(StudentProfile.student_id == student_id))
             job_profile = db.scalar(select(JobProfile).where(JobProfile.job_code == job_code))
@@ -124,6 +133,13 @@ class CareerPathService:
                 },
             ]
             rationale = "基于岗位图谱的晋升链路和转岗链路，结合学生当前技能覆盖情况生成主路径与备选路径。"
+
+            # Build enriched content
+            current_ability = self._build_current_ability(student_profile, job_profile)
+            certificate_recommendations = self._build_certificate_recommendations(student_profile, job_profile)
+            learning_resources = self._build_learning_resources(student_profile, job_profile, gaps)
+            evaluation_metrics = self._build_evaluation_metrics(job_profile, recommendations)
+
             existing = db.scalar(
                 select(PathRecommendation)
                 .where(PathRecommendation.student_id == student_id)
@@ -139,8 +155,20 @@ class CareerPathService:
             existing.transition_graph_json = transition_graph
             existing.gaps_json = gaps
             existing.recommendations_json = recommendations
+            existing.current_ability_json = current_ability
+            existing.certificate_recommendations_json = certificate_recommendations
+            existing.learning_resources_json = learning_resources
+            existing.evaluation_metrics_json = evaluation_metrics
+            # Store binding IDs
+            if profile_version_id is not None:
+                existing.profile_version_id = profile_version_id
+            if match_result_id is not None:
+                existing.match_result_id = match_result_id
+            if analysis_run_id is not None:
+                existing.analysis_run_id = analysis_run_id
             db.commit()
             return {
+                "path_recommendation_id": existing.id,
                 "student_id": student_id,
                 "target_job_code": job_code,
                 "primary_path": primary_path,
@@ -150,6 +178,13 @@ class CareerPathService:
                 "gaps": gaps,
                 "recommendations": recommendations,
                 "rationale": rationale,
+                "current_ability": current_ability,
+                "certificate_recommendations": certificate_recommendations,
+                "learning_resources": learning_resources,
+                "evaluation_metrics": evaluation_metrics,
+                "profile_version_id": existing.profile_version_id,
+                "match_result_id": existing.match_result_id,
+                "analysis_run_id": existing.analysis_run_id,
             }
         except ValueError as e:
             logger.error(f"ValueError in plan_path for student {student_id}, job {job_code}: {str(e)}")
@@ -157,6 +192,85 @@ class CareerPathService:
         except Exception as e:
             logger.error(f"Unexpected error in plan_path for student {student_id}, job {job_code}: {str(e)}")
             raise ValueError(f"Failed to plan career path: {str(e)}") from e
+
+    def _build_current_ability(self, student_profile: StudentProfile, job_profile: JobProfile) -> dict[str, Any]:
+        """Build current ability starting point from student profile."""
+        student_skills = set(student_profile.skills_json or [])
+        job_skills = set(job_profile.skill_requirements or [])
+        matched_skills = list(student_skills & job_skills)
+        missing_skills = list(job_skills - student_skills)
+        student_certs = set(student_profile.certificates_json or [])
+        job_certs = set(job_profile.certificate_requirements or [])
+        return {
+            "skills": student_profile.skills_json or [],
+            "certificates": list(student_certs),
+            "projects": student_profile.projects_json or [],
+            "internships": student_profile.internships_json or [],
+            "capability_scores": student_profile.capability_scores or {},
+            "matched_skills": matched_skills,
+            "missing_skills": missing_skills,
+        }
+
+    def _build_certificate_recommendations(self, student_profile: StudentProfile, job_profile: JobProfile) -> list[dict[str, Any]]:
+        """Build certificate recommendations based on gap analysis."""
+        student_certs = set(student_profile.certificates_json or [])
+        job_certs = set(job_profile.certificate_requirements or [])
+        missing_certs = job_certs - student_certs
+        recommendations = []
+        for cert in missing_certs:
+            recommendations.append({
+                "name": cert,
+                "priority": "高" if cert in list(job_certs)[:3] else "中",
+                "reason": f"目标岗位 {job_profile.title} 要求持有 {cert} 证书",
+            })
+        return recommendations
+
+    def _build_learning_resources(
+        self, student_profile: StudentProfile, job_profile: JobProfile, gaps: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Build learning resource recommendations."""
+        resources = []
+        # From missing skills
+        missing_skills = set(job_profile.skill_requirements or []) - set(student_profile.skills_json or [])
+        for skill in list(missing_skills)[:5]:
+            resources.append({
+                "type": "技能",
+                "name": skill,
+                "suggestion": f"通过在线课程或项目实践提升 {skill} 技能",
+                "phase": "短期",
+            })
+        # From gaps
+        for gap in gaps[:3]:
+            for missing in gap.get("missing_skills", [])[:2]:
+                resources.append({
+                    "type": "技能",
+                    "name": missing,
+                    "suggestion": f"补齐 {missing} 以满足转岗路径要求",
+                    "phase": "中期",
+                })
+        return resources
+
+    def _build_evaluation_metrics(self, job_profile: JobProfile, recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Build evaluation metrics for short/mid-term plans."""
+        metrics = []
+        for rec in recommendations:
+            phase = rec.get("phase", "短期")
+            items = rec.get("items", [])
+            if phase == "短期":
+                metrics.append({
+                    "phase": phase,
+                    "metric": "技能覆盖率提升",
+                    "target": f"{phase}内掌握 {', '.join(items[:2])}",
+                    "evaluation_method": "技能自评 + 项目实践验证",
+                })
+            else:
+                metrics.append({
+                    "phase": phase,
+                    "metric": "项目/实习成果达成",
+                    "target": f"{phase}内完成 {', '.join(items[:2])}",
+                    "evaluation_method": "实习反馈 + 阶段复盘",
+                })
+        return metrics
 
     def _build_vertical_graph(self, graph: dict, primary_path: list[str], profiles_by_title: dict[str, JobProfile]) -> dict:
         promotion_paths = _unique_paths(graph.get("promotion_paths", []) or [primary_path])

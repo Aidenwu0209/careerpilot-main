@@ -2553,6 +2553,80 @@ a[aria-label] {
   background: var(--success);
 }
 
+.admin-user-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-user-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.admin-user-form input,
+.admin-user-form select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.admin-user-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-action-button,
+.admin-table-button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.admin-action-button:hover,
+.admin-table-button:hover {
+  background: rgba(15, 116, 218, 0.06);
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.admin-action-button--primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.admin-action-button--primary:hover {
+  background: var(--brand-2);
+}
+
+.admin-table-button--danger {
+  border-color: rgba(220, 38, 38, 0.25);
+  color: #dc2626;
+}
+
+.admin-table-button--danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
 /* ===========================
    LANDING PAGE MINI HEADER
    =========================== */

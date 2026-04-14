@@ -137,6 +137,81 @@ def _extract_target_job(text: str) -> str:
     return value.strip(" ：:")
 
 
+def _extract_school(text: str) -> str:
+    """Extract school/university name from resume text."""
+    explicit = re.search(r"(学校|院校|大学|School|University)\s*[:：]\s*([^\n|｜，,；;]+)", text, flags=re.IGNORECASE)
+    if explicit:
+        return explicit.group(2).strip()
+    # Look for university name pattern: XX大学/学院
+    match = re.search(r"([\u4e00-\u9fff]{2,20}(?:大学|学院|学校))", text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _extract_grade(text: str) -> str:
+    """Extract grade level from resume text."""
+    match = re.search(r"(年级|Grade)\s*[:：]\s*([^\n|｜，,；;]+)", text, flags=re.IGNORECASE)
+    if match:
+        return match.group(2).strip()
+    # Look for grade patterns like 大三、研二、2024届
+    match = re.search(r"(大一|大二|大三|大四|研一|研二|研三|博一|博二|博三|博四|研{0,1}.{0,1}\d{0,1}年级)", text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _extract_graduation_year(text: str) -> str:
+    """Extract graduation year from resume text."""
+    match = re.search(r"(毕业年份|毕业时间|Graduation)\s*[:：]\s*(\d{4})", text, flags=re.IGNORECASE)
+    if match:
+        return match.group(2)
+    # Look for year patterns like 2025届, 2026年毕业
+    match = re.search(r"(\d{4})\s*届", text)
+    if match:
+        return match.group(1)
+    match = re.search(r"(\d{4})\s*年\s*毕业", text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def _extract_competitions(text: str) -> list[str]:
+    """Extract competitions and honors from resume text."""
+    results = []
+    # Look for sections with 竞赛/荣誉/奖项/获奖
+    section_match = re.search(
+        r"(?:竞赛|荣誉|奖项|获奖|比赛|Award|Honor|Competition)[：:]*\s*\n?((?:[-–•*·\d]+[.、)）\s]*.+\n?)+)",
+        text, flags=re.IGNORECASE,
+    )
+    if section_match:
+        items = re.findall(r"[-–•*·]\s*(.+)", section_match.group(1))
+        results.extend(item.strip() for item in items if item.strip())
+    # Also look for inline patterns
+    inline = re.findall(r"(?:竞赛|比赛|获奖|荣誉|奖项)[:： ]*(.+?)(?:\n|$)", text)
+    for item in inline:
+        item = item.strip()
+        if item and len(item) < 200:
+            results.append(item)
+    return results
+
+
+def _extract_self_evaluation(text: str) -> str:
+    """Extract self-evaluation / self-introduction from resume text."""
+    # Look for sections like 自我评价/个人总结/自我介绍
+    match = re.search(
+        r"(?:自我评价|个人总结|自我介绍|个人简介|Self[- ]?Evaluation|Summary)\s*[:：]?\s*\n?((?:[^\n]+\n?)+?)(?=\n\s*\n|\Z|$)",
+        text, flags=re.IGNORECASE,
+    )
+    if match:
+        content = match.group(1).strip()
+        # Clean up - take first meaningful paragraph
+        lines = [line.strip() for line in content.splitlines() if line.strip()]
+        if lines:
+            return " ".join(lines[:3])  # Take up to 3 lines
+    return ""
+
+
 def _extract_text_from_office_file(file_name: str, content_bytes: bytes) -> str:
     lowered = file_name.lower()
     if lowered.endswith(".pdf"):
@@ -173,11 +248,17 @@ def _empty_ocr_result(document_type: str, message: str) -> dict[str, Any]:
         "structured_json": {
             "document_type": document_type,
             "name": "未知学生",
+            "school": "",
             "major": "",
+            "grade": "",
+            "graduation_year": "",
+            "target_job": "",
             "skills": [],
             "certificates": [],
             "projects": [],
             "internships": [],
+            "competitions": [],
+            "self_evaluation": "",
             "gpa": None,
             "ocr_warning": message,
         },
@@ -249,12 +330,17 @@ class MockOCRProvider(BaseOCRProvider):
         structured = {
             "document_type": document_type,
             "name": _extract_name(text),
+            "school": _extract_school(text),
             "major": _extract_major(text),
+            "grade": _extract_grade(text),
+            "graduation_year": _extract_graduation_year(text),
             "target_job": _extract_target_job(text),
             "skills": skills,
             "certificates": certificates,
             "projects": [item[1].strip() for item in projects],
             "internships": [item[1].strip() for item in internships],
+            "competitions": _extract_competitions(text),
+            "self_evaluation": _extract_self_evaluation(text),
             "gpa": _extract_gpa(text),
         }
         layout_blocks = [

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -12,21 +12,28 @@ logger = logging.getLogger(__name__)
 
 from app.api.deps import get_current_user, get_db_session
 from app.models import (
+    AnalysisRun,
     CareerReport,
     ChatMessageRecord,
+    FollowupRecord,
     HistoryTitle,
     JobProfile,
     JobPosting,
     MatchResult,
     PathRecommendation,
+    ProfileVersion,
     Student,
     StudentProfile,
+    TeacherComment,
+    UploadedFile,
     User,
 )
 from app.services.matching.recommendation import (
     extract_resume_experience_context,
+    generate_recommendation_reason,
     score_recommended_job,
 )
+from app.schemas.job import RecommendedJobItem, RecommendedJobsResponse
 
 router = APIRouter()
 
@@ -138,10 +145,27 @@ def update_target_job(
     if not student:
         student = Student(user_id=current_user.id)
         db.add(student)
+        db.flush()
     student.target_job_code = payload.job_code
     student.target_job_title = payload.job_title
+
+    # Sync to the latest AnalysisRun for this student
+    latest_run = db.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.student_id == student.id)
+        .order_by(AnalysisRun.id.desc())
+        .limit(1)
+    )
+    if latest_run and latest_run.status in ("pending", "running"):
+        latest_run.target_job_code = payload.job_code
+
     db.commit()
-    return {"ok": True, "target_job_code": payload.job_code, "target_job_title": payload.job_title}
+    return {
+        "ok": True,
+        "target_job_code": payload.job_code,
+        "target_job_title": payload.job_title,
+        "analysis_run_id": latest_run.id if latest_run else None,
+    }
 
 
 @router.get("/me/recommended-jobs")
@@ -209,148 +233,229 @@ def get_recommended_jobs(
             matched = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"] + scoring["intent_tags"]))[:6]
             missing = scoring["missing_skills"][:4]
 
-            if scoring["intent_tags"]:
-                reason = f"OCR 意向岗位命中 {', '.join(scoring['intent_tags'])}，并结合项目/技能证据推荐。"
-            elif scoring["experience_reason"]:
-                reason = scoring["experience_reason"]
-            elif len(matched) >= 3:
-                reason = f"已掌握 {', '.join(matched[:3])} 等核心技能。"
-            elif len(matched) >= 1:
-                reason = f"已掌握 {', '.join(matched)}，可补强 {', '.join(missing[:2])} 等技能。"
-            elif scoring["potential_score"] >= 80:
-                reason = "学习能力和综合素质较好，适合冲刺此方向。"
-            else:
-                reason = f"建议重点补齐 {', '.join(missing[:3])} 等技能。"
+            reason = generate_recommendation_reason(
+                scoring=scoring,
+                student_profile=student_profile,
+                student_info={"major": student.major, "grade": student.grade},
+                job_profile=jp,
+                experience=experience,
+            )
 
-            jobs.append({
-                "job_code": jp.job_code,
-                "title": jp.title,
-                "company": company_name,
-                "salary": salary_range,
-                "location": posting.location if posting else "",
-                "industry": posting.industry if posting else "",
-                "company_size": posting.company_size if posting else "",
-                "ownership_type": posting.ownership_type if posting else "",
-                "summary": jp.summary or (posting.description if posting else ""),
-                "tags": skills,
-                "matched_tags": matched,
-                "missing_tags": missing,
-                "experience_tags": scoring["experience_tags"],
-                "reason": reason,
-                "match_score": scoring["score"],
-                "base_score": scoring["base_score"],
-                "experience_score": scoring["experience_score"],
-                "skill_score": scoring["skill_score"],
-                "potential_score": scoring["potential_score"],
-            })
+            jobs.append(RecommendedJobItem(
+                job_code=jp.job_code,
+                title=jp.title,
+                company=company_name,
+                salary=salary_range,
+                location=posting.location if posting else "",
+                industry=posting.industry if posting else "",
+                company_size=posting.company_size if posting else "",
+                ownership_type=posting.ownership_type if posting else "",
+                summary=jp.summary or (posting.description if posting else ""),
+                tags=skills,
+                matched_tags=matched,
+                missing_tags=missing,
+                experience_tags=scoring["experience_tags"],
+                reason=reason,
+                match_score=scoring["score"],
+                base_score=scoring["base_score"],
+                experience_score=scoring["experience_score"],
+                skill_score=scoring["skill_score"],
+                potential_score=scoring["potential_score"],
+            ))
 
-    return {"items": jobs}
+    return RecommendedJobsResponse(items=jobs)
 
 
 @router.get("/me/history")
 def get_student_history(
+    record_type: Optional[str] = Query(None, alias="type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
+    """Unified history endpoint with optional type filter.
+
+    Supported type values: upload, profile, matching, path, report, chat, feedback.
+    Returns all types when type is not specified.
+    """
+    VALID_TYPES = {"upload", "profile", "matching", "path", "report", "chat", "feedback"}
+    if record_type and record_type not in VALID_TYPES:
+        return {"items": []}
+
     student = db.scalar(select(Student).where(Student.user_id == current_user.id))
     if not student:
         return {"items": []}
 
     records = []
 
-    reports = list(db.scalars(
-        select(CareerReport)
-        .where(CareerReport.student_id == student.id)
-        .order_by(CareerReport.created_at.desc())
-        .limit(20)
-    ).all())
+    # --- Upload records ---
+    if not record_type or record_type == "upload":
+        file_type_label = {"resume": "简历", "certificate": "证书", "transcript": "成绩单", "other": "其他材料"}
+        uploads = list(db.scalars(
+            select(UploadedFile)
+            .where(UploadedFile.owner_id == current_user.id)
+            .order_by(UploadedFile.created_at.desc())
+            .limit(20)
+        ).all())
+        for f in uploads:
+            label = file_type_label.get(f.file_type, f.file_type)
+            records.append({
+                "id": f"upload-{f.id}",
+                "type": "upload",
+                "ref_id": f.id,
+                "title": f"上传{label} — {f.file_name[:40]}",
+                "desc": f"文件类型: {label}",
+                "time": f.created_at.isoformat() if f.created_at else "",
+                "source_file_id": f.id,
+            })
 
-    for r in reports:
-        jp = db.scalar(
-            select(JobProfile).where(JobProfile.job_code == r.target_job_code).limit(1)
+    # --- Profile version records ---
+    if not record_type or record_type == "profile":
+        profiles = list(db.scalars(
+            select(ProfileVersion)
+            .where(ProfileVersion.student_id == student.id)
+            .order_by(ProfileVersion.created_at.desc())
+            .limit(20)
+        ).all())
+        for pv in profiles:
+            file_ids = pv.uploaded_file_ids or []
+            source_desc = f"基于 {len(file_ids)} 份材料生成" if file_ids else "基于手动输入生成"
+            records.append({
+                "id": f"profile-{pv.id}",
+                "type": "profile",
+                "ref_id": pv.id,
+                "title": f"能力画像 — 版本 {pv.version_no}",
+                "desc": source_desc,
+                "time": pv.created_at.isoformat() if pv.created_at else "",
+                "profile_version_id": pv.id,
+                "uploaded_file_ids": file_ids,
+            })
+
+    # --- Matching records ---
+    if not record_type or record_type == "matching":
+        student_profile = db.scalar(
+            select(StudentProfile).where(StudentProfile.student_id == student.id)
         )
-        title = f"职业规划报告 — {jp.title}" if jp else f"职业规划报告 — {r.target_job_code}"
-        desc = f"报告状态: {r.status}"
-        if r.status == "completed":
-            desc = "已完成职业规划报告"
-        elif r.status == "edited":
-            desc = "已编辑职业规划报告"
+        if student_profile:
+            matches = list(db.scalars(
+                select(MatchResult)
+                .where(MatchResult.student_profile_id == student_profile.id)
+                .order_by(MatchResult.created_at.desc())
+                .limit(20)
+            ).all())
 
-        records.append({
-            "id": f"report-{r.id}",
-            "type": "report",
-            "ref_id": r.id,
-            "title": title,
-            "desc": desc,
-            "time": r.created_at.isoformat() if r.created_at else "",
-        })
+            for m in matches:
+                jp = db.scalar(
+                    select(JobProfile).where(JobProfile.id == m.job_profile_id).limit(1)
+                )
+                title = f"岗位匹配 — {jp.title}" if jp else "岗位匹配"
+                desc = f"匹配度 {round(m.total_score, 1)}"
+                records.append({
+                    "id": f"match-{m.id}",
+                    "type": "matching",
+                    "ref_id": m.id,
+                    "title": title,
+                    "desc": desc,
+                    "time": m.created_at.isoformat() if m.created_at else "",
+                    "profile_version_id": m.profile_version_id,
+                    "analysis_run_id": m.analysis_run_id,
+                })
 
-    student_profile = db.scalar(
-        select(StudentProfile).where(StudentProfile.student_id == student.id)
-    )
-    if student_profile:
-        matches = list(db.scalars(
-            select(MatchResult)
-            .where(MatchResult.student_profile_id == student_profile.id)
-            .order_by(MatchResult.created_at.desc())
+    # --- Path planning records ---
+    if not record_type or record_type == "path":
+        paths = list(db.scalars(
+            select(PathRecommendation)
+            .where(PathRecommendation.student_id == student.id)
+            .order_by(PathRecommendation.created_at.desc())
+            .limit(10)
+        ).all())
+
+        for p in paths:
+            jp = db.scalar(
+                select(JobProfile).where(JobProfile.job_code == p.target_job_code).limit(1)
+            )
+            title = f"职业路径规划 — {jp.title}" if jp else f"职业路径规划 — {p.target_job_code}"
+            records.append({
+                "id": f"path-{p.id}",
+                "type": "path",
+                "ref_id": p.id,
+                "title": title,
+                "desc": "已生成职业发展路径",
+                "time": p.created_at.isoformat() if p.created_at else "",
+                "profile_version_id": p.profile_version_id,
+                "match_result_id": p.match_result_id,
+                "analysis_run_id": p.analysis_run_id,
+            })
+
+    # --- Report records ---
+    if not record_type or record_type == "report":
+        reports = list(db.scalars(
+            select(CareerReport)
+            .where(CareerReport.student_id == student.id)
+            .order_by(CareerReport.created_at.desc())
             .limit(20)
         ).all())
 
-        for m in matches:
+        for r in reports:
             jp = db.scalar(
-                select(JobProfile).where(JobProfile.id == m.job_profile_id).limit(1)
+                select(JobProfile).where(JobProfile.job_code == r.target_job_code).limit(1)
             )
-            title = f"岗位匹配 — {jp.title}" if jp else "岗位匹配"
-            desc = f"匹配度 {round(m.total_score, 1)}"
-
+            title = f"职业规划报告 — {jp.title}" if jp else f"职业规划报告 — {r.target_job_code}"
+            desc = f"报告状态: {r.status}"
+            if r.status == "completed":
+                desc = "已完成职业规划报告"
+            elif r.status == "edited":
+                desc = "已编辑职业规划报告"
             records.append({
-                "id": f"match-{m.id}",
-                "type": "matching",
-                "ref_id": m.id,
+                "id": f"report-{r.id}",
+                "type": "report",
+                "ref_id": r.id,
                 "title": title,
                 "desc": desc,
-                "time": m.created_at.isoformat() if m.created_at else "",
+                "time": r.created_at.isoformat() if r.created_at else "",
+                "profile_version_id": r.profile_version_id,
+                "match_result_id": r.match_result_id,
+                "analysis_run_id": r.analysis_run_id,
             })
 
-    paths = list(db.scalars(
-        select(PathRecommendation)
-        .where(PathRecommendation.student_id == student.id)
-        .order_by(PathRecommendation.created_at.desc())
-        .limit(10)
-    ).all())
+    # --- Chat records ---
+    if not record_type or record_type == "chat":
+        chat_msgs = list(db.scalars(
+            select(ChatMessageRecord)
+            .where(ChatMessageRecord.user_id == current_user.id, ChatMessageRecord.role == "user")
+            .order_by(ChatMessageRecord.created_at.desc())
+            .limit(30)
+        ).all())
 
-    for p in paths:
-        jp = db.scalar(
-            select(JobProfile).where(JobProfile.job_code == p.target_job_code).limit(1)
-        )
-        title = f"职业路径规划 — {jp.title}" if jp else f"职业路径规划 — {p.target_job_code}"
+        for msg in chat_msgs:
+            summary = msg.content[:50] + ("..." if len(msg.content) > 50 else "")
+            records.append({
+                "id": f"chat-{msg.id}",
+                "type": "chat",
+                "ref_id": msg.id,
+                "title": f"AI 对话 — {summary}",
+                "desc": "AI 职业规划咨询" + ("（含简历上下文）" if msg.has_context else ""),
+                "time": msg.created_at.isoformat() if msg.created_at else "",
+            })
 
-        records.append({
-            "id": f"path-{p.id}",
-            "type": "path",
-            "ref_id": p.id,
-            "title": title,
-            "desc": "已生成职业发展路径",
-            "time": p.created_at.isoformat() if p.created_at else "",
-        })
-
-    chat_msgs = list(db.scalars(
-        select(ChatMessageRecord)
-        .where(ChatMessageRecord.user_id == current_user.id, ChatMessageRecord.role == "user")
-        .order_by(ChatMessageRecord.created_at.desc())
-        .limit(30)
-    ).all())
-
-    for msg in chat_msgs:
-        summary = msg.content[:50] + ("..." if len(msg.content) > 50 else "")
-        records.append({
-            "id": f"chat-{msg.id}",
-            "type": "chat",
-            "ref_id": msg.id,
-            "title": f"AI 对话 — {summary}",
-            "desc": "AI 职业规划咨询" + ("（含简历上下文）" if msg.has_context else ""),
-            "time": msg.created_at.isoformat() if msg.created_at else "",
-        })
+    # --- Teacher feedback records ---
+    if not record_type or record_type == "feedback":
+        feedbacks = list(db.scalars(
+            select(FollowupRecord)
+            .where(FollowupRecord.student_id == student.id)
+            .order_by(FollowupRecord.created_at.desc())
+            .limit(20)
+        ).all())
+        for fb in feedbacks:
+            fb_type_label = {"advice": "指导建议", "comment": "点评反馈", "followup": "跟进记录"}.get(fb.record_type, fb.record_type)
+            summary = fb.content[:50] + ("..." if len(fb.content) > 50 else "") if fb.content else ""
+            records.append({
+                "id": f"feedback-{fb.id}",
+                "type": "feedback",
+                "ref_id": fb.id,
+                "title": f"教师反馈 — {fb_type_label}",
+                "desc": summary or fb_type_label,
+                "time": fb.created_at.isoformat() if fb.created_at else "",
+            })
 
     records.sort(key=lambda x: x["time"], reverse=True)
 
@@ -364,7 +469,7 @@ def get_student_history(
         if key in title_map and title_map[key]:
             rec["title"] = title_map[key]
 
-    return {"items": records[:30]}
+    return {"items": records[:50]}
 
 
 class RenameHistoryRequest(BaseModel):
@@ -397,3 +502,65 @@ def rename_history_item(
         ))
     db.commit()
     return {"ok": True}
+
+
+# --- Teacher Feedback for Students ---
+
+@router.get("/me/teacher-feedback")
+def get_teacher_feedback(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """Student views teacher feedback (only visible_to_student=True comments)."""
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        return {"items": []}
+
+    from datetime import datetime, timezone
+    comments = db.scalars(
+        select(TeacherComment)
+        .where(
+            TeacherComment.student_id == student.id,
+            TeacherComment.visible_to_student == True,
+        )
+        .order_by(TeacherComment.created_at.desc())
+    ).all()
+
+    items = []
+    for c in comments:
+        teacher_user = db.scalar(select(User).where(User.id == c.teacher_id))
+        items.append({
+            "id": c.id,
+            "teacher_name": teacher_user.full_name if teacher_user else "教师",
+            "report_id": c.report_id,
+            "comment": c.comment,
+            "priority": c.priority,
+            "student_read_at": c.student_read_at.isoformat() if c.student_read_at else None,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+
+    return {"items": items}
+
+
+@router.post("/me/teacher-feedback/{comment_id}/read")
+def mark_feedback_read(
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """Student marks a teacher feedback as read."""
+    from datetime import datetime, timezone
+    comment = db.scalar(select(TeacherComment).where(TeacherComment.id == comment_id))
+    if not comment:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=404, detail="反馈不存在")
+
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student or comment.student_id != student.id:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    comment.student_read_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"ok": True, "read_at": comment.student_read_at.isoformat()}

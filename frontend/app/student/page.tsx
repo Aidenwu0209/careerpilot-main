@@ -196,7 +196,14 @@ export default function StudentMainPage() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
+          const hasMockNotice = parsed.some(
+            (msg: ChatMessage) => typeof msg?.content === "string" && msg.content.includes("Mock 模式"),
+          );
+          if (hasMockNotice) {
+            localStorage.removeItem("chat_messages");
+          } else {
+            setMessages(parsed);
+          }
         }
       } catch {
         // Ignore invalid saved data
@@ -436,6 +443,7 @@ export default function StudentMainPage() {
   };
 
   const handleDeleteFile = async (fileId: number) => {
+    if (!window.confirm("确定要删除此文件吗？删除后不可恢复。")) return;
     setDeletingId(fileId);
     try {
       await deleteFile(fileId);
@@ -446,10 +454,15 @@ export default function StudentMainPage() {
     }
   };
 
-  const handleJobSelect = (code: string, title: string) => {
+  const handleJobSelect = async (code: string, title: string) => {
     setJobCode(code);
     setJobTitle(title);
-    updateTargetJob(code, title).catch(() => {});
+    try {
+      const result = await updateTargetJob(code, title);
+      if (result.analysis_run_id) {
+        setAnalysisRunId(result.analysis_run_id);
+      }
+    } catch {}
   };
 
   const fileTypeLabel: Record<string, string> = {
