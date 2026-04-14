@@ -577,10 +577,16 @@ export type HistoryItem = {
   title: string;
   desc: string;
   time: string;
+  profile_version_id?: number;
+  uploaded_file_ids?: number[];
+  analysis_run_id?: number;
+  match_result_id?: number;
+  source_file_id?: number;
 };
 
-export async function getStudentHistory(): Promise<HistoryItem[]> {
-  const res = await request<{ items: HistoryItem[] }>("/students/me/history");
+export async function getStudentHistory(type?: string): Promise<HistoryItem[]> {
+  const query = type ? `?type=${encodeURIComponent(type)}` : "";
+  const res = await request<{ items: HistoryItem[] }>(`/students/me/history${query}`);
   return res.items;
 }
 

@@ -33,7 +33,8 @@ type IconName =
   | "hash"
   | "check"
   | "plus"
-  | "tag";
+  | "tag"
+  | "upload";
 
 const paths: Record<IconName, string> = {
   home: "M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1V9.5z",
@@ -67,6 +68,7 @@ const paths: Record<IconName, string> = {
   check: "M20 6L9 17l-5-5",
   plus: "M12 5v14M5 12h14",
   tag: "M12 2l-10 10 3 3 10-10-3-3z M9 7l6 6",
+  upload: "M12 16V4M12 4l-4 4M12 4l4 4M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2",
 };
 
 type IconProps = {
