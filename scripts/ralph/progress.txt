@@ -13,7 +13,6 @@
 - 认证使用 JWT Bearer token，`get_current_user` 依赖验证（`backend/app/api/deps.py`）
 - 测试使用 `pytest` + `FastAPI TestClient`，配置在 `backend/tests/conftest.py`，mock providers 通过环境变量切换
 - 前端使用 Next.js 15 App Router，API 客户端在 `frontend/lib/api.ts`，类型内联定义
-- 前端 `node_modules` 未安装，需运行 `npm install` 才能做前端类型检查
 - 数据库无迁移系统，启动时 `Base.metadata.create_all()` 自动建表
 - Provider 模式：LLM/OCR/Storage/Graph/RAG 均有 mock 和 real 实现，通过 `.env` 切换
 - 无 Alembic 迁移，表结构变更需手动处理或重建数据库
@@ -24,6 +23,7 @@
 - 分析路由 `PATCH /{run_id}/context` 用于逐步关联下游结果，`exclude_unset=True` 保证部分更新不清空其他字段
 - `ProfileVersion.snapshot_json` 存储完整画像快照，包含 `uploaded_file_ids` 和 `mode` 用于追溯来源
 - Router 层通过 `try/except ValueError` 捕获 service 层业务校验并返回 400 错误
+- 前端学生画像页面在 `frontend/app/student/profile/page.tsx`，已集成版本历史列表和快照查看
 
 ## 2026-04-14 22:30 - US-001
 - 实现了多类型文件上传的校验与标准化元数据返回
@@ -145,4 +145,20 @@
   - `snapshot_json` 不再包含 `evidence` 字段，证据链已独立存储在 `evidence_snapshot_json`
   - 文件上传后 `file_name` 是 UUID 格式（如 `cdd22e57-...docx`），不是原始文件名
   - 前端 `node_modules` 未安装，前端构建检查需要先 `npm install`
+---
+
+## 2026-04-14 22:30 - US-007
+- 实现了学生端历史画像版本查看
+  - 前端：将版本列表显示条件从 `versions.length > 1` 改为 `versions.length > 0`，单版本也展示
+  - 前端：每个版本项增加文件摘要展示（file_type 标签 + summary/file_name），区分简历、证书、成绩单来源
+  - 前端：点击版本项时调用 `getProfileVersionDetail` 获取完整快照数据，而非仅列表数据
+  - API：新增 `getProfileVersionDetail` 函数调用 `GET /student-profiles/{id}/versions/{vid}`
+- 更改的文件：
+  - `frontend/app/student/profile/page.tsx` — 版本历史列表增强：显示文件摘要、单版本也展示、详情加载
+  - `frontend/lib/api.ts` — 新增 getProfileVersionDetail API 函数
+- **未来迭代的学习：**
+  - `ProfileVersionItem.file_summaries` 包含 `file_id`、`file_name`、`file_type`、`summary`，可用来区分不同来源文件的画像版本
+  - 版本详情端点 `GET /student-profiles/{student_id}/versions/{version_id}` 返回完整 `ProfileVersionOut` 含 `snapshot` 和 `evidence_snapshot`
+  - 后端已有 4 个 pre-existing failures（3 个 auth 401 + 1 个匹配维度断言），与本次改动无关
+  - 需要手动浏览器验证：版本历史列表 UI、文件摘要标签、版本切换功能
 ---
