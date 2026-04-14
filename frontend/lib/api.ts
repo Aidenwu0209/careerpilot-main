@@ -315,6 +315,10 @@ export async function getProfileVersions(studentId: number): Promise<ProfileVers
   return res.items;
 }
 
+export async function getProfileVersionDetail(studentId: number, versionId: number): Promise<ProfileVersionItem> {
+  return request<ProfileVersionItem>(`/student-profiles/${studentId}/versions/${versionId}`);
+}
+
 function generateDemoChatReply(message: string): string {
   const keywords = ["技能", "职业", "岗位", "方向", "入行", "前景"];
   if (keywords.some((kw) => message.includes(kw))) {
