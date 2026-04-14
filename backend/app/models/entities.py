@@ -246,6 +246,15 @@ class PathRecommendation(TimestampMixin, Base):
     transition_graph_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     gaps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     recommendations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Enriched content fields
+    current_ability_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    certificate_recommendations_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    learning_resources_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    evaluation_metrics_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # Context binding fields
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    match_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("match_results.id"), nullable=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
 
 
 class GrowthTask(TimestampMixin, Base):
@@ -279,6 +288,10 @@ class CareerReport(TimestampMixin, Base):
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
     target_job_code: Mapped[str] = mapped_column(String(80), index=True)
     path_recommendation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("path_recommendations.id"), nullable=True)
+    # Context binding fields — link report to profile version, match result, and analysis run
+    profile_version_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profile_versions.id"), nullable=True)
+    match_result_id: Mapped[Optional[int]] = mapped_column(ForeignKey("match_results.id"), nullable=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
     content_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     markdown_content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(40), default="draft")

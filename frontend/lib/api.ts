@@ -20,6 +20,9 @@ export type ReportDraft = {
   content: Record<string, unknown>;
   status: string;
   path_recommendation_id: number | null;
+  profile_version_id: number | null;
+  match_result_id: number | null;
+  analysis_run_id: number | null;
 };
 
 export type StudentSession = {

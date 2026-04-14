@@ -44,6 +44,9 @@ def get_report(
         markdown_content=report.markdown_content,
         status=report.status,
         path_recommendation_id=report.path_recommendation_id,
+        profile_version_id=report.profile_version_id,
+        match_result_id=report.match_result_id,
+        analysis_run_id=report.analysis_run_id,
     )
 
 
@@ -67,7 +70,12 @@ async def generate_report(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无法确定目标岗位，请先选择或确认一个目标岗位")
 
     try:
-        result = await container.report_service.generate_report(db, payload.student_id, job_code)
+        result = await container.report_service.generate_report(
+            db, payload.student_id, job_code,
+            analysis_run_id=payload.analysis_run_id,
+            profile_version_id=payload.profile_version_id,
+            match_result_id=payload.match_result_id,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return ReportResponse(**result)

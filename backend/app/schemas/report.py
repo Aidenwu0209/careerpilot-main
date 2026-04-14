@@ -8,14 +8,23 @@ from app.schemas.common import ExportedFile
 class ReportGenerateRequest(BaseModel):
     student_id: int = Field(..., gt=0)
     job_code: str = Field("", max_length=100)
+    analysis_run_id: int | None = None
+    profile_version_id: int | None = None
+    match_result_id: int | None = None
 
 
 class ReportContent(BaseModel):
-    overview: str
+    student_summary: dict[str, Any]
+    resume_summary: dict[str, Any]
+    capability_profile: dict[str, Any]
+    target_job_analysis: dict[str, Any]
     matching_analysis: dict[str, Any]
-    goals: dict[str, Any]
-    action_plan: dict[str, Any]
-    evidence: dict[str, Any]
+    gap_analysis: dict[str, Any]
+    career_path: dict[str, Any]
+    short_term_plan: dict[str, Any]
+    mid_term_plan: dict[str, Any]
+    evaluation_cycle: dict[str, Any]
+    teacher_comments: dict[str, Any]
 
 
 class ReportResponse(BaseModel):
@@ -26,6 +35,9 @@ class ReportResponse(BaseModel):
     markdown_content: str
     status: str
     path_recommendation_id: int | None = None
+    profile_version_id: int | None = None
+    match_result_id: int | None = None
+    analysis_run_id: int | None = None
 
 
 class ReportPolishRequest(BaseModel):
