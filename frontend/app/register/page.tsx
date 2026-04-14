@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { registerAccount } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
-
 const roles = [
   { key: "student", label: "学生" },
   { key: "teacher", label: "教师" },
@@ -40,6 +38,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [teacherCode, setTeacherCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -68,10 +68,27 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!email.trim()) {
+      setError("请输入邮箱");
+      return;
+    }
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      setError("邮箱格式不正确");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const data = await registerAccount(username, password, fullName, activeRole);
+      const data = await registerAccount(
+        username,
+        password,
+        fullName,
+        activeRole,
+        email.trim(),
+        activeRole === "student" ? teacherCode.trim() : "",
+      );
       const token = data.access_token;
 
       if (!token) {
@@ -146,6 +163,31 @@ export default function RegisterPage() {
                 required
               />
             </div>
+
+            <div>
+              <label htmlFor="email">邮箱</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="用于账号通知和老师绑定"
+                required
+              />
+            </div>
+
+            {activeRole === "student" && (
+              <div>
+                <label htmlFor="teacherCode">所属老师</label>
+                <input
+                  id="teacherCode"
+                  type="text"
+                  value={teacherCode}
+                  onChange={(e) => setTeacherCode(e.target.value)}
+                  placeholder="填写老师用户名或邮箱，可稍后由管理员绑定"
+                />
+              </div>
+            )}
 
             <div>
               <label htmlFor="password">密码</label>

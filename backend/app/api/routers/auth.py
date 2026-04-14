@@ -34,7 +34,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db_session)) -> Login
 @router.post("/register", response_model=LoginResponse)
 def register(payload: RegisterRequest, db: Session = Depends(get_db_session)) -> LoginResponse:
     try:
-        user = register_user(db, payload.username, payload.password, payload.full_name, payload.role)
+        user = register_user(
+            db,
+            payload.username,
+            payload.password,
+            payload.full_name,
+            payload.role,
+            email=str(payload.email or ""),
+            teacher_code=(payload.teacher_code or ""),
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -60,4 +68,3 @@ def me(current_user: User = Depends(get_current_user)) -> LoginResponse:
         username=current_user.username,
         full_name=current_user.full_name,
     )
-

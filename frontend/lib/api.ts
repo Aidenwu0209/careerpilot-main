@@ -377,10 +377,12 @@ export async function registerAccount(
   password: string,
   full_name: string,
   role: string,
+  email: string = "",
+  teacher_code: string = "",
 ): Promise<{ access_token: string; role: string; user_id: number; username: string; full_name: string }> {
   return request("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ username, password, full_name, role }),
+    body: JSON.stringify({ username, password, full_name, role, email, teacher_code }),
   });
 }
 
