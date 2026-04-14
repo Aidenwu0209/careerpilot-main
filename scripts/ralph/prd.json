@@ -238,7 +238,7 @@
       "priority": 14,
       "passes": true,
       "notes": "",
-      "retryCount": 1,
+      "retryCount": 0,
       "blocked": false
     },
     {
@@ -253,7 +253,7 @@
         "Verify in browser using agent-browser"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false

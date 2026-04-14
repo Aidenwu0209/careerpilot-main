@@ -30,6 +30,8 @@
 - `CareerReport` 模型有 `profile_version_id`、`match_result_id`、`analysis_run_id` 上下文绑定字段，与 MatchResult/PathRecommendation 模式一致
 - 报告 `generate_report()` 接受 `analysis_run_id` 并自动从 run 回填 `profile_version_id` 和 `match_result_id`
 - `AnalysisRun.report_id` 会在报告生成时自动回写，形成双向绑定
+- SQLAlchemy JSON 列原地修改 dict 不会触发 dirty tracking，需要 `obj.json_col = new_dict` 整体替换才能 commit
+- `ReportVersion` 是报告变更的审计记录，save/polish 都应创建版本记录保持追溯能力
 
 ## 2026-04-14 22:30 - US-001
 - 实现了多类型文件上传的校验与标准化元数据返回
@@ -332,5 +334,24 @@
   - `AnalysisRun.report_id` 在报告生成时回写，`AnalysisRun.match_result_id` 在匹配分析时回写，形成完整上下文链
   - 前端 `ReportDraft.content` 类型为 `Record<string, unknown>`，新增 section 不需要前端类型变更
   - 已有 3 个 pre-existing integration failures（auth 401），与本次改动无关
+---
+
+## 2026-04-14 23:30 - US-015
+- 实现了报告保存、润色与完整性检查的完整闭环
+  - Service：新增 `save_report` 方法到 service 层，保存时创建 ReportVersion 记录（与 polish 一致）
+  - Service：`polish_report` 返回值新增 4 个上下文绑定字段（path_recommendation_id、profile_version_id、match_result_id、analysis_run_id）
+  - Service：`check_completeness` 增强为检查非空 section（不仅检查 key 存在），新增 teacher_comments 缺失建议
+  - Router：save 端点重构为调用 service 方法，移除 router 层内联逻辑
+  - 前端：报告结果页已有完整的保存/润色/检查 UI 按钮，无需修改
+  - 测试：新增 10 个测试覆盖保存版本记录（3个）、润色返回绑定字段和版本记录（4个）、完整性检查（3个）
+- 更改的文件：
+  - `backend/app/services/reports/report_service.py` — 新增 save_report、增强 polish 返回值和 check_completeness
+  - `backend/app/api/routers/reports.py` — save 端点调用 service 方法
+  - `backend/tests/unit/test_report_save_polish_check.py` — 新增测试文件
+- **未来迭代的学习：**
+  - SQLAlchemy JSON 列修改需要替换整个 dict 才能触发 dirty tracking，直接 `dict[key] = value` 不会被 commit
+  - `ReportVersion` 是报告变更的审计记录，save 和 polish 都应创建版本记录
+  - 前端结果页 `/results/[id]` 已集成所有报告操作按钮（编辑、保存、润色、检查、导出 PDF/DOCX）
+  - 需要手动浏览器验证：报告编辑保存、润色、完整性检查 UI 交互
 ---
 ---
