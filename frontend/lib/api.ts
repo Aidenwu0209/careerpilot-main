@@ -234,6 +234,9 @@ export async function generateReport(studentId: number, jobCode: string): Promis
         content: {},
         status: "draft",
         path_recommendation_id: null,
+        profile_version_id: null,
+        match_result_id: null,
+        analysis_run_id: null,
       };
     }
     throw error;
