@@ -13,15 +13,15 @@ const teacherNavItems = [
   { href: "/teacher/advice", label: "指导建议", icon: <Icon name="chat" size={18} /> },
 ];
 
-const followupStatusLabels: Record<string, string> = {
-  pending: "待跟进",
-  in_progress: "跟进中",
-  read: "已读",
-  communicated: "已沟通",
-  review: "需复盘",
-  completed: "已完成",
-  overdue: "已逾期",
-};
+const followupStatusOptions = [
+  { key: "pending", label: "待跟进" },
+  { key: "in_progress", label: "跟进中" },
+  { key: "read", label: "已读" },
+  { key: "communicated", label: "已沟通" },
+  { key: "review", label: "需复盘" },
+  { key: "completed", label: "已完成" },
+  { key: "overdue", label: "已逾期" },
+];
 
 export default function TeacherAdvicePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -141,25 +141,46 @@ export default function TeacherAdvicePage() {
                         type="date"
                         value={followupDate}
                         onChange={e => setFollowupDate(e.target.value)}
-                        style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "0.85rem" }}
+                        style={{
+                          width: "100%",
+                          minHeight: 44,
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          border: "1px solid #d1d5db",
+                          fontSize: "0.85rem",
+                          background: "#fff",
+                        }}
                       />
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {Object.entries(followupStatusLabels).map(([key, label]) => (
-                        <button
-                          key={key}
-                          onClick={() => handleFollowup(item.student_id, key)}
-                          disabled={saving}
-                          style={{
-                            padding: "4px 12px", borderRadius: 6, fontSize: "0.8rem",
-                            border: "1px solid #d1d5db", background: "#fff",
-                            cursor: saving ? "not-allowed" : "pointer",
-                            opacity: saving ? 0.6 : 1,
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                    <div style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: 8 }}>跟进状态</label>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: 8 }}>
+                        {followupStatusOptions.map(({ key, label }) => (
+                          <button
+                            key={key}
+                            onClick={() => handleFollowup(item.student_id, key)}
+                            disabled={saving}
+                            style={{
+                              width: "100%",
+                              minHeight: 40,
+                              padding: "8px 12px",
+                              borderRadius: 6,
+                              border: "1px solid #d1d5db",
+                              background: "#fff",
+                              color: "#13233f",
+                              cursor: saving ? "not-allowed" : "pointer",
+                              fontSize: "0.8rem",
+                              fontWeight: 600,
+                              opacity: saving ? 0.6 : 1,
+                              boxShadow: "none",
+                              filter: "none",
+                              transform: "none",
+                            }}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}

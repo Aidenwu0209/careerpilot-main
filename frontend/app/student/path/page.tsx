@@ -62,6 +62,15 @@ export default function StudentPathPage() {
 
   const verticalNodes = (plan?.vertical_graph?.nodes ?? []) as VerticalNode[];
   const transitionRoles = (plan?.transition_graph?.role_paths ?? []) as TransitionRole[];
+  const pathTheme = {
+    primary: "#0f74da",
+    primaryDark: "#0f4f9a",
+    primarySoft: "#eef6ff",
+    surface: "#f7fbff",
+    border: "#cfe0f5",
+    mutedBorder: "#dce8f6",
+    rail: "#dce8f6",
+  };
 
   return (
     <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px" }}>
@@ -150,48 +159,45 @@ export default function StudentPathPage() {
             {verticalNodes.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {verticalNodes.map((node, index, arr) => {
-                const isTarget = node.stage === "当前目标" || index === 0;
                 return (
                   <div key={`${node.title}-${index}`} style={{ display: "flex", gap: 16 }}>
                     {/* Timeline rail */}
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 28, flexShrink: 0 }}>
                       <div
                         style={{
-                          width: isTarget ? 14 : 10,
-                          height: isTarget ? 14 : 10,
+                          width: 10,
+                          height: 10,
                           borderRadius: "50%",
-                          background: isTarget ? "#0f74da" : "#fff",
-                          border: `${isTarget ? 3 : 2}px solid ${isTarget ? "#0f74da" : "#c1cdd9"}`,
+                          background: "#fff",
+                          border: `2px solid ${pathTheme.mutedBorder}`,
                           flexShrink: 0,
                           marginTop: 20,
-                          boxShadow: isTarget ? "0 0 0 3px rgba(15,116,218,0.18)" : "none",
                         }}
                       />
                       {index < arr.length - 1 && (
-                        <div style={{ width: 2, flex: 1, background: "#dde5ed", minHeight: 16 }} />
+                        <div style={{ width: 2, flex: 1, background: pathTheme.rail, minHeight: 16 }} />
                       )}
                     </div>
                     {/* Node card */}
                     <div
                       style={{
                         flex: 1,
-                        border: isTarget ? "2px solid #0f74da" : "1px solid rgba(15,116,218,0.16)",
+                        border: `1px solid ${pathTheme.border}`,
                         borderRadius: 8,
                         padding: 16,
-                        background: isTarget ? "#eef6ff" : "#fff",
+                        background: pathTheme.surface,
                         marginBottom: 12,
-                        boxShadow: isTarget ? "0 2px 8px rgba(15,116,218,0.12)" : "none",
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 10, alignItems: "center" }}>
-                        <span style={{ color: "#0f74da", fontWeight: 700, fontSize: "0.8125rem" }}>L{node.level ?? index + 1}</span>
+                        <span style={{ color: pathTheme.primary, fontWeight: 700, fontSize: "0.8125rem" }}>L{node.level ?? index + 1}</span>
                         {node.stage && (
                           <span
                             style={{
                               padding: "2px 8px",
                               borderRadius: 6,
-                              background: isTarget ? "#0f74da" : "#f0fdfa",
-                              color: isTarget ? "#fff" : "#0f766e",
+                              background: pathTheme.primarySoft,
+                              color: pathTheme.primaryDark,
                               fontSize: "0.75rem",
                               fontWeight: 700,
                             }}
@@ -204,7 +210,7 @@ export default function StudentPathPage() {
                       <p style={{ margin: "0 0 12px", color: "var(--subtle)", fontSize: "0.8125rem", lineHeight: 1.6 }}>{node.description || "围绕岗位要求持续沉淀项目成果。"}</p>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {(node.skills ?? []).slice(0, 4).map((skill) => (
-                          <span key={skill} style={{ padding: "4px 8px", borderRadius: 8, background: "#eef6ff", color: "#0f4f9a", fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
+                          <span key={skill} style={{ padding: "4px 8px", borderRadius: 8, background: pathTheme.primarySoft, color: pathTheme.primaryDark, fontSize: "0.75rem", fontWeight: 600 }}>{skill}</span>
                         ))}
                       </div>
                     </div>
@@ -222,7 +228,7 @@ export default function StudentPathPage() {
                 <h3 style={{ margin: "0 0 10px", fontSize: "0.9375rem" }}>其他晋升链路</h3>
                 <div style={{ display: "grid", gap: 8 }}>
                   {(plan?.vertical_graph?.promotion_paths ?? []).map((path: string[]) => (
-                    <div key={path.join("-")} style={{ padding: "10px 12px", borderRadius: 8, background: "#f8fafc", color: "var(--ink)" }}>
+                    <div key={path.join("-")} style={{ padding: "10px 12px", borderRadius: 8, background: pathTheme.surface, color: "var(--ink)", border: `1px solid ${pathTheme.border}` }}>
                       {path.join(" → ")}
                     </div>
                   ))}
@@ -239,7 +245,6 @@ export default function StudentPathPage() {
             {transitionRoles.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {transitionRoles.map((role, roleIdx) => {
-                  const isTargetRole = role.title === plan?.transition_graph?.target;
                   return (
                     <div
                       key={role.title}
@@ -256,9 +261,9 @@ export default function StudentPathPage() {
                           flexShrink: 0,
                           padding: "12px 14px",
                           borderRadius: 8,
-                          border: isTargetRole ? "2px solid #0f74da" : "1px solid rgba(0,0,0,0.08)",
-                          background: isTargetRole ? "#eef6ff" : "#fff",
-                          boxShadow: isTargetRole ? "0 2px 8px rgba(15,116,218,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
+                          border: `1px solid ${pathTheme.border}`,
+                          background: pathTheme.surface,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                           textAlign: "center",
                         }}
                       >
@@ -267,8 +272,8 @@ export default function StudentPathPage() {
                             width: 32,
                             height: 32,
                             borderRadius: "50%",
-                            background: isTargetRole ? "#0f74da" : "#f0f4f8",
-                            color: isTargetRole ? "#fff" : "#64748b",
+                            background: pathTheme.primarySoft,
+                            color: pathTheme.primaryDark,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -289,8 +294,8 @@ export default function StudentPathPage() {
                                 style={{
                                   padding: "2px 6px",
                                   borderRadius: 6,
-                                  background: isTargetRole ? "#dbeafe" : "#f0f4f8",
-                                  color: isTargetRole ? "#1d4ed8" : "#64748b",
+                                  background: pathTheme.primarySoft,
+                                  color: pathTheme.primaryDark,
                                   fontSize: "0.6875rem",
                                   fontWeight: 600,
                                 }}
@@ -305,7 +310,7 @@ export default function StudentPathPage() {
                       {/* Connector + paths */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                          <div style={{ width: 24, height: 2, background: isTargetRole ? "#0f74da" : "#dde5ed" }} />
+                          <div style={{ width: 24, height: 2, background: pathTheme.rail }} />
                           <span style={{ fontSize: "0.75rem", color: "var(--subtle)", fontWeight: 600 }}>
                             {role.paths?.length || 0} 条换岗路径
                           </span>
@@ -317,8 +322,8 @@ export default function StudentPathPage() {
                               style={{
                                 padding: 14,
                                 borderRadius: 8,
-                                background: "#f8fafc",
-                                border: "1px solid rgba(0,0,0,0.04)",
+                                background: pathTheme.surface,
+                                border: `1px solid ${pathTheme.border}`,
                               }}
                             >
                               {/* Step flow */}
@@ -329,11 +334,11 @@ export default function StudentPathPage() {
                                       style={{
                                         padding: "3px 10px",
                                         borderRadius: 6,
-                                        background: isTargetRole && stepIdx === 0 ? "#0f74da" : "#fff",
-                                        color: isTargetRole && stepIdx === 0 ? "#fff" : "var(--ink)",
+                                        background: "#fff",
+                                        color: "var(--ink)",
                                         fontSize: "0.8125rem",
                                         fontWeight: 600,
-                                        border: isTargetRole && stepIdx === 0 ? "none" : "1px solid #e2e8f0",
+                                        border: `1px solid ${pathTheme.mutedBorder}`,
                                       }}
                                     >
                                       {step}
@@ -353,15 +358,15 @@ export default function StudentPathPage() {
                               {/* Skill bridge */}
                               {(path.skill_bridge ?? []).length > 0 && (
                                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                  <span style={{ fontSize: "0.75rem", color: "#8a4b00", fontWeight: 600 }}>技能桥接：</span>
+                                  <span style={{ fontSize: "0.75rem", color: pathTheme.primaryDark, fontWeight: 600 }}>技能桥接：</span>
                                   {(path.skill_bridge ?? []).map((skill) => (
                                     <span
                                       key={skill}
                                       style={{
                                         padding: "3px 8px",
                                         borderRadius: 6,
-                                        background: "#fff4e5",
-                                        color: "#8a4b00",
+                                        background: pathTheme.primarySoft,
+                                        color: pathTheme.primaryDark,
                                         fontSize: "0.75rem",
                                         fontWeight: 600,
                                       }}
@@ -390,12 +395,12 @@ export default function StudentPathPage() {
           <SectionCard title="成长建议与行动计划">
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {(plan?.recommendations ?? []).map((rec: { phase?: string; focus?: string; items?: string[] }, idx: number) => (
-                <div key={idx} style={{ padding: 16, borderRadius: 8, background: rec.phase === "短期" ? "#f0fdf4" : "#eff6ff", border: `1px solid ${rec.phase === "短期" ? "#bbf7d0" : "#bfdbfe"}` }}>
+                <div key={idx} style={{ padding: 16, borderRadius: 8, background: pathTheme.surface, border: `1px solid ${pathTheme.border}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <span style={{
                       padding: "3px 10px",
                       borderRadius: 6,
-                      background: rec.phase === "短期" ? "#16a34a" : "#2563eb",
+                      background: pathTheme.primary,
                       color: "#fff",
                       fontSize: "0.75rem",
                       fontWeight: 700,

@@ -442,9 +442,42 @@ export type AdminUser = {
   updated_at: string | null;
 };
 
+export type AdminUserInput = {
+  username: string;
+  password?: string;
+  full_name: string;
+  role: "student" | "teacher" | "admin";
+  email: string;
+};
+
 export async function getAdminUsers(): Promise<{ total: number; items: AdminUser[] }> {
   const res = await request<{ data: { total: number; items: AdminUser[] } }>("/admin/users");
   return res.data;
+}
+
+export async function getAdminUser(userId: number): Promise<AdminUser> {
+  const res = await request<{ data: AdminUser }>(`/admin/users/${userId}`);
+  return res.data;
+}
+
+export async function createAdminUser(data: AdminUserInput & { password: string }): Promise<AdminUser> {
+  const res = await request<{ data: AdminUser }>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
+export async function updateAdminUser(userId: number, data: Partial<AdminUserInput>): Promise<AdminUser> {
+  const res = await request<{ data: AdminUser }>(`/admin/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
+export async function deleteAdminUser(userId: number): Promise<void> {
+  await request(`/admin/users/${userId}`, { method: "DELETE" });
 }
 
 export type AdminStatsOverview = {

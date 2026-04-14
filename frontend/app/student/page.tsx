@@ -196,7 +196,14 @@ export default function StudentMainPage() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
+          const hasMockNotice = parsed.some(
+            (msg: ChatMessage) => typeof msg?.content === "string" && msg.content.includes("Mock 模式"),
+          );
+          if (hasMockNotice) {
+            localStorage.removeItem("chat_messages");
+          } else {
+            setMessages(parsed);
+          }
         }
       } catch {
         // Ignore invalid saved data

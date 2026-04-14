@@ -2,10 +2,13 @@ from datetime import datetime, timedelta, timezone
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
+from app.core.config import get_settings
 from app.models import (
     CareerReport,
     JobPosting,
@@ -19,6 +22,43 @@ from app.models import (
 from app.schemas.common import APIResponse
 
 router = APIRouter()
+
+VALID_USER_ROLES = {"student", "teacher", "admin"}
+
+
+class AdminUserCreate(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+    password: str = Field(..., min_length=1, max_length=128)
+    full_name: str = Field(..., min_length=1, max_length=100)
+    role: str = "student"
+    email: str = ""
+
+
+class AdminUserUpdate(BaseModel):
+    username: str | None = Field(None, min_length=1, max_length=64)
+    password: str | None = Field(None, min_length=1, max_length=128)
+    full_name: str | None = Field(None, min_length=1, max_length=100)
+    role: str | None = None
+    email: str | None = None
+
+
+def _serialize_user(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "role": user.role,
+        "email": user.email,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+def _ensure_role_profile(db: Session, user: User) -> None:
+    if user.role == "student" and not db.scalar(select(Student).where(Student.user_id == user.id)):
+        db.add(Student(user_id=user.id, major="", grade="", career_goal="", learning_preferences={}))
+    if user.role == "teacher" and not db.scalar(select(Teacher).where(Teacher.user_id == user.id)):
+        db.add(Teacher(user_id=user.id, department="", title=""))
 
 
 @router.get("/users", response_model=APIResponse)
@@ -36,18 +76,7 @@ def list_users(
 
     return APIResponse(data={
         "total": total,
-        "items": [
-            {
-                "id": u.id,
-                "username": u.username,
-                "full_name": u.full_name,
-                "role": u.role,
-                "email": u.email,
-                "created_at": u.created_at.isoformat() if u.created_at else None,
-                "updated_at": u.updated_at.isoformat() if u.updated_at else None,
-            }
-            for u in rows
-        ],
+        "items": [_serialize_user(u) for u in rows],
     })
 
 
@@ -55,29 +84,35 @@ def list_users(
 
 @router.post("/users", response_model=APIResponse)
 def create_user(
-    username: str,
-    password: str,
-    full_name: str,
-    role: str = "student",
-    email: str = "",
+    payload: AdminUserCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    if payload.role not in VALID_USER_ROLES:
+        raise HTTPException(status_code=400, detail=f"无效角色，允许值：{', '.join(sorted(VALID_USER_ROLES))}")
+    if db.scalar(select(User).where(User.username == payload.username)):
+        raise HTTPException(status_code=400, detail="用户名已存在")
 
     from app.services.auth_service import hash_password
     user = User(
-        username=username,
-        password_hash=hash_password(password),
-        full_name=full_name,
-        role=role,
-        email=email,
+        username=payload.username,
+        password_hash=hash_password(payload.password),
+        full_name=payload.full_name,
+        role=payload.role,
+        email=payload.email,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.flush()
+        _ensure_role_profile(db, user)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="用户创建失败，请检查用户名或关联数据是否重复") from exc
     db.refresh(user)
-    return APIResponse(data={"id": user.id, "username": user.username, "role": user.role})
+    return APIResponse(data=_serialize_user(user))
 
 
 @router.get("/users/{user_id}", response_model=APIResponse)
@@ -93,20 +128,13 @@ def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    return APIResponse(data={
-        "id": user.id, "username": user.username, "full_name": user.full_name,
-        "role": user.role, "email": user.email,
-        "created_at": user.created_at.isoformat() if user.created_at else None,
-        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-    })
+    return APIResponse(data=_serialize_user(user))
 
 
 @router.put("/users/{user_id}", response_model=APIResponse)
 def update_user(
     user_id: int,
-    full_name: str | None = None,
-    role: str | None = None,
-    email: str | None = None,
+    payload: AdminUserUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
@@ -117,15 +145,33 @@ def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    if full_name is not None:
-        user.full_name = full_name
-    if role is not None:
-        user.role = role
-    if email is not None:
-        user.email = email
-    db.commit()
+    if payload.username is not None and payload.username != user.username:
+        if db.scalar(select(User).where(User.username == payload.username, User.id != user_id)):
+            raise HTTPException(status_code=400, detail="用户名已存在")
+        user.username = payload.username
+    if payload.full_name is not None:
+        user.full_name = payload.full_name
+    if payload.role is not None:
+        if payload.role not in VALID_USER_ROLES:
+            raise HTTPException(status_code=400, detail=f"无效角色，允许值：{', '.join(sorted(VALID_USER_ROLES))}")
+        if user.id == current_user.id and payload.role != "admin":
+            raise HTTPException(status_code=400, detail="不能取消自己的管理员角色")
+        user.role = payload.role
+    if payload.email is not None:
+        user.email = payload.email
+    if payload.password:
+        from app.services.auth_service import hash_password
+        user.password_hash = hash_password(payload.password)
 
-    return APIResponse(data={"id": user.id, "updated": True})
+    try:
+        _ensure_role_profile(db, user)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="用户更新失败，请检查数据是否重复") from exc
+    db.refresh(user)
+
+    return APIResponse(data=_serialize_user(user))
 
 
 @router.delete("/users/{user_id}", response_model=APIResponse)
@@ -144,8 +190,29 @@ def delete_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=400, detail="不能删除自己")
 
+    related_student = db.scalar(select(Student).where(Student.user_id == user_id))
+    related_teacher = db.scalar(select(Teacher).where(Teacher.user_id == user_id))
+
+    if related_student:
+        has_student_data = db.scalar(select(CareerReport.id).where(CareerReport.student_id == related_student.id).limit(1))
+        has_student_data = has_student_data or db.scalar(select(MatchResult.id).where(MatchResult.student_id == related_student.id).limit(1))
+        has_student_data = has_student_data or db.scalar(select(TeacherStudentLink.id).where(TeacherStudentLink.student_id == related_student.id).limit(1))
+        if has_student_data:
+            raise HTTPException(status_code=400, detail="该学生已有报告、匹配或师生绑定数据，不能直接删除")
+        db.delete(related_student)
+
+    if related_teacher:
+        has_teacher_data = db.scalar(select(TeacherStudentLink.id).where(TeacherStudentLink.teacher_id == related_teacher.id).limit(1))
+        if has_teacher_data:
+            raise HTTPException(status_code=400, detail="该教师已有师生绑定数据，不能直接删除")
+        db.delete(related_teacher)
+
     db.delete(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="该用户存在关联数据，不能直接删除") from exc
     return APIResponse(data={"deleted": True, "id": user_id})
 
 
@@ -794,11 +861,12 @@ def list_configs(
     from app.models import SystemConfig
     configs = db.scalars(select(SystemConfig)).all()
     items = [{"key": c.key, "value": c.value, "updated_at": c.updated_at.isoformat() if c.updated_at else None} for c in configs]
+    settings = get_settings()
 
     return APIResponse(data={"items": items, "env": {
-        "LLM_PROVIDER": os.environ.get("LLM_PROVIDER", "mock"),
-        "OCR_PROVIDER": os.environ.get("OCR_PROVIDER", "mock"),
-        "STORAGE_PROVIDER": os.environ.get("STORAGE_PROVIDER", "local"),
+        "LLM_PROVIDER": settings.llm_provider,
+        "OCR_PROVIDER": settings.ocr_provider,
+        "STORAGE_PROVIDER": settings.storage_provider,
     }})
 
 
