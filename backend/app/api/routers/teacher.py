@@ -12,13 +12,33 @@ from app.models import (
     ProfileVersion,
     Student,
     StudentProfile,
+    Teacher,
     TeacherComment,
+    TeacherStudentLink,
     UploadedFile,
     User,
 )
 from app.schemas.common import APIResponse
 
 router = APIRouter()
+
+
+def _get_teacher_bound_student_ids(current_user: User, db: Session) -> list[int] | None:
+    """Return list of student IDs bound to current teacher, or None if admin (no filter)."""
+    if current_user.role == "admin":
+        return None  # Admin sees all
+
+    teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
+    if not teacher:
+        return []
+
+    link_rows = db.scalars(
+        select(TeacherStudentLink.student_id).where(
+            TeacherStudentLink.teacher_id == teacher.id,
+            TeacherStudentLink.status == "active",
+        )
+    ).all()
+    return list(link_rows)
 
 
 @router.get("/students/reports", response_model=APIResponse)
@@ -35,7 +55,11 @@ def get_student_reports(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+
     query = select(Student).order_by(Student.id)
+    if bound_ids is not None:
+        query = query.where(Student.id.in_(bound_ids))
     if major:
         query = query.where(Student.major == major)
     if grade:
@@ -148,9 +172,12 @@ def match_distribution(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    scores = db.scalars(
-        select(MatchResult.total_score)
-    ).all()
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+
+    scores_query = select(MatchResult.total_score)
+    if bound_ids is not None:
+        scores_query = scores_query.join(StudentProfile).where(StudentProfile.student_id.in_(bound_ids))
+    scores = db.scalars(scores_query).all()
 
     ranges = [
         ("90分以上", 90, 101),
@@ -176,10 +203,12 @@ def major_distribution(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    rows = db.execute(
-        select(Student.major, func.count(Student.id))
-        .group_by(Student.major)
-    ).all()
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+
+    query = select(Student.major, func.count(Student.id)).group_by(Student.major)
+    if bound_ids is not None:
+        query = query.where(Student.id.in_(bound_ids))
+    rows = db.execute(query).all()
 
     result = [
         {"name": row[0] if row[0] else "未设置", "value": row[1]}
@@ -200,7 +229,12 @@ def get_teacher_advice(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    students = db.scalars(select(Student).order_by(Student.id)).all()
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+
+    query = select(Student).order_by(Student.id)
+    if bound_ids is not None:
+        query = query.where(Student.id.in_(bound_ids))
+    students = db.scalars(query).all()
     items = []
 
     for stu in students:

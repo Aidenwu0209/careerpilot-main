@@ -24,6 +24,7 @@ from app.models import (
     ProfileVersion,
     Student,
     StudentProfile,
+    TeacherComment,
     UploadedFile,
     User,
 )
@@ -501,3 +502,65 @@ def rename_history_item(
         ))
     db.commit()
     return {"ok": True}
+
+
+# --- Teacher Feedback for Students ---
+
+@router.get("/me/teacher-feedback")
+def get_teacher_feedback(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """Student views teacher feedback (only visible_to_student=True comments)."""
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        return {"items": []}
+
+    from datetime import datetime, timezone
+    comments = db.scalars(
+        select(TeacherComment)
+        .where(
+            TeacherComment.student_id == student.id,
+            TeacherComment.visible_to_student == True,
+        )
+        .order_by(TeacherComment.created_at.desc())
+    ).all()
+
+    items = []
+    for c in comments:
+        teacher_user = db.scalar(select(User).where(User.id == c.teacher_id))
+        items.append({
+            "id": c.id,
+            "teacher_name": teacher_user.full_name if teacher_user else "教师",
+            "report_id": c.report_id,
+            "comment": c.comment,
+            "priority": c.priority,
+            "student_read_at": c.student_read_at.isoformat() if c.student_read_at else None,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+
+    return {"items": items}
+
+
+@router.post("/me/teacher-feedback/{comment_id}/read")
+def mark_feedback_read(
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """Student marks a teacher feedback as read."""
+    from datetime import datetime, timezone
+    comment = db.scalar(select(TeacherComment).where(TeacherComment.id == comment_id))
+    if not comment:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=404, detail="反馈不存在")
+
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student or comment.student_id != student.id:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    comment.student_read_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"ok": True, "read_at": comment.student_read_at.isoformat()}

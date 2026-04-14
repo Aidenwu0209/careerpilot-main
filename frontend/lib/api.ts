@@ -706,6 +706,27 @@ export async function deleteTeacherComment(commentId: number): Promise<void> {
   await request(`/teacher/comments/${commentId}`, { method: "DELETE" });
 }
 
+// --- Student: Teacher Feedback ---
+
+export type TeacherFeedbackItem = {
+  id: number;
+  teacher_name: string;
+  report_id: number;
+  comment: string;
+  priority: string;
+  student_read_at: string | null;
+  created_at: string | null;
+};
+
+export async function getStudentTeacherFeedback(): Promise<TeacherFeedbackItem[]> {
+  const res = await request<{ items: TeacherFeedbackItem[] }>("/students/me/teacher-feedback");
+  return res.items;
+}
+
+export async function markFeedbackRead(commentId: number): Promise<{ ok: boolean; read_at: string }> {
+  return request(`/students/me/teacher-feedback/${commentId}/read`, { method: "POST" });
+}
+
 export type RecommendedJob = {
   job_code: string;
   title: string;

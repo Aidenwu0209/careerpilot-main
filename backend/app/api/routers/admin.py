@@ -50,6 +50,131 @@ def list_users(
     })
 
 
+# --- User CRUD ---
+
+@router.post("/users", response_model=APIResponse)
+def create_user(
+    username: str,
+    password: str,
+    full_name: str,
+    role: str = "student",
+    email: str = "",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    from app.services.auth_service import hash_password
+    user = User(
+        username=username,
+        password_hash=hash_password(password),
+        full_name=full_name,
+        role=role,
+        email=email,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return APIResponse(data={"id": user.id, "username": user.username, "role": user.role})
+
+
+@router.get("/users/{user_id}", response_model=APIResponse)
+def get_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    user = db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    return APIResponse(data={
+        "id": user.id, "username": user.username, "full_name": user.full_name,
+        "role": user.role, "email": user.email,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    })
+
+
+@router.put("/users/{user_id}", response_model=APIResponse)
+def update_user(
+    user_id: int,
+    full_name: str | None = None,
+    role: str | None = None,
+    email: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    user = db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if full_name is not None:
+        user.full_name = full_name
+    if role is not None:
+        user.role = role
+    if email is not None:
+        user.email = email
+    db.commit()
+
+    return APIResponse(data={"id": user.id, "updated": True})
+
+
+@router.delete("/users/{user_id}", response_model=APIResponse)
+def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    user = db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能删除自己")
+
+    db.delete(user)
+    db.commit()
+    return APIResponse(data={"deleted": True, "id": user_id})
+
+
+@router.patch("/users/{user_id}/status", response_model=APIResponse)
+def toggle_user_status(
+    user_id: int,
+    active: bool = True,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+
+    user = db.scalar(select(User).where(User.id == user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user.email = user.email or ""  # ensure non-null
+    # Store disabled status in email field prefix as a simple mechanism
+    if not active:
+        if not user.email.startswith("[disabled]"):
+            user.email = f"[disabled]{user.email}"
+    else:
+        if user.email.startswith("[disabled]"):
+            user.email = user.email[len("[disabled]"):]
+    db.commit()
+
+    return APIResponse(data={"id": user.id, "active": active})
+
+
 @router.get("/stats/overview", response_model=APIResponse)
 def stats_overview(
     current_user: User = Depends(get_current_user),
