@@ -503,10 +503,29 @@ export type TeacherStudentReport = {
   major: string;
   grade: string;
   career_goal: string;
+  last_analysis_time: string | null;
+  followup_status: string;
 };
 
-export async function getTeacherStudentReports(): Promise<TeacherStudentReport[]> {
-  const res = await request<{ data: TeacherStudentReport[] }>("/teacher/students/reports");
+export type TeacherReportFilters = {
+  major?: string;
+  grade?: string;
+  target_job?: string;
+  report_status?: string;
+  score_min?: number;
+  score_max?: number;
+};
+
+export async function getTeacherStudentReports(filters?: TeacherReportFilters): Promise<TeacherStudentReport[]> {
+  const params = new URLSearchParams();
+  if (filters?.major) params.set("major", filters.major);
+  if (filters?.grade) params.set("grade", filters.grade);
+  if (filters?.target_job) params.set("target_job", filters.target_job);
+  if (filters?.report_status) params.set("report_status", filters.report_status);
+  if (filters?.score_min !== undefined) params.set("score_min", String(filters.score_min));
+  if (filters?.score_max !== undefined) params.set("score_max", String(filters.score_max));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const res = await request<{ data: TeacherStudentReport[] }>(`/teacher/students/reports${query}`);
   return res.data;
 }
 
@@ -517,6 +536,21 @@ export type DistributionItem = {
 
 export async function getMatchDistribution(): Promise<DistributionItem[]> {
   const res = await request<{ data: DistributionItem[] }>("/teacher/stats/match-distribution");
+  return res.data;
+}
+
+export type TeacherOverviewStats = {
+  total_students: number;
+  students_with_resume: number;
+  students_with_profile: number;
+  students_with_report: number;
+  avg_match_score: number;
+  pending_review_reports: number;
+  students_need_followup: number;
+};
+
+export async function getTeacherOverviewStats(): Promise<TeacherOverviewStats> {
+  const res = await request<{ data: TeacherOverviewStats }>("/teacher/stats/overview");
   return res.data;
 }
 
@@ -541,6 +575,135 @@ export type TeacherAdviceItem = {
 export async function getTeacherAdvice(): Promise<TeacherAdviceItem[]> {
   const res = await request<{ data: TeacherAdviceItem[] }>("/teacher/advice");
   return res.data;
+}
+
+export type TeacherStudentReportListItem = {
+  report_id: number;
+  target_job: string;
+  status: string;
+  profile_version_id: number | null;
+  match_result_id: number | null;
+  analysis_run_id: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+  profile_version_no: number | null;
+};
+
+export async function getTeacherStudentReportList(studentId: number): Promise<TeacherStudentReportListItem[]> {
+  const res = await request<{ data: TeacherStudentReportListItem[] }>(`/teacher/students/${studentId}/reports`);
+  return res.data;
+}
+
+export type TeacherReportDetail = {
+  report_id: number;
+  student_id: number;
+  student_name: string;
+  student_major: string;
+  student_grade: string;
+  target_job_code: string;
+  status: string;
+  content: Record<string, unknown>;
+  markdown_content: string;
+  resume_summary: Record<string, unknown>;
+  profile_snapshot: Record<string, unknown>;
+  match_analysis: {
+    total_score: number;
+    gaps: { item: string; description: string }[];
+    strengths: string[];
+    suggestions: string[];
+  };
+  profile_version_id: number | null;
+  match_result_id: number | null;
+  path_recommendation_id: number | null;
+  analysis_run_id: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function getTeacherReportDetail(reportId: number): Promise<TeacherReportDetail> {
+  const res = await request<{ data: TeacherReportDetail }>(`/teacher/reports/${reportId}`);
+  return res.data;
+}
+
+export type ClassOverviewData = {
+  job_distribution: { name: string; value: number }[];
+  report_completion_rate: number;
+  resume_completeness: { name: string; value: number }[];
+  skill_gaps: { name: string; count: number }[];
+  followup_students: { student_id: number; name: string; major: string; career_goal: string }[];
+};
+
+export async function getClassOverview(): Promise<ClassOverviewData> {
+  const res = await request<{ data: ClassOverviewData }>("/teacher/stats/class-overview");
+  return res.data;
+}
+
+export async function updateFollowupStatus(
+  studentId: number,
+  data: { status?: string; next_followup_date?: string; teacher_notes?: string },
+): Promise<{ student_id: number; status: string; deadline: string | null; updated: boolean }> {
+  const params = new URLSearchParams();
+  if (data.status) params.set("status_value", data.status);
+  if (data.next_followup_date) params.set("next_followup_date", data.next_followup_date);
+  if (data.teacher_notes) params.set("teacher_notes", data.teacher_notes);
+  const res = await request<{ data: { student_id: number; status: string; deadline: string | null; updated: boolean } }>(
+    `/teacher/students/${studentId}/followup?${params.toString()}`,
+    { method: "PATCH" },
+  );
+  return res.data;
+}
+
+// --- Teacher Comment CRUD ---
+
+export type TeacherCommentItem = {
+  id: number;
+  teacher_id: number;
+  teacher_name: string;
+  student_id: number;
+  report_id: number;
+  comment: string;
+  priority: string;
+  visible_to_student: boolean;
+  student_read_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function createTeacherComment(
+  reportId: number,
+  commentText: string,
+  priority: string = "normal",
+  visibleToStudent: boolean = true,
+): Promise<{ id: number; comment: string; priority: string; visible_to_student: boolean; created_at: string | null }> {
+  const res = await request<{ data: { id: number; comment: string; priority: string; visible_to_student: boolean; created_at: string | null } }>(
+    `/teacher/reports/${reportId}/comments?comment_text=${encodeURIComponent(commentText)}&priority=${priority}&visible_to_student=${visibleToStudent}`,
+    { method: "POST" },
+  );
+  return res.data;
+}
+
+export async function getTeacherComments(reportId: number): Promise<TeacherCommentItem[]> {
+  const res = await request<{ data: TeacherCommentItem[] }>(`/teacher/reports/${reportId}/comments`);
+  return res.data;
+}
+
+export async function updateTeacherComment(
+  commentId: number,
+  data: { comment_text?: string; priority?: string; visible_to_student?: boolean },
+): Promise<{ id: number; comment: string; priority: string; visible_to_student: boolean; updated_at: string | null }> {
+  const params = new URLSearchParams();
+  if (data.comment_text !== undefined) params.set("comment_text", data.comment_text);
+  if (data.priority !== undefined) params.set("priority", data.priority);
+  if (data.visible_to_student !== undefined) params.set("visible_to_student", String(data.visible_to_student));
+  const res = await request<{ data: { id: number; comment: string; priority: string; visible_to_student: boolean; updated_at: string | null } }>(
+    `/teacher/comments/${commentId}?${params.toString()}`,
+    { method: "PUT" },
+  );
+  return res.data;
+}
+
+export async function deleteTeacherComment(commentId: number): Promise<void> {
+  await request(`/teacher/comments/${commentId}`, { method: "DELETE" });
 }
 
 export type RecommendedJob = {

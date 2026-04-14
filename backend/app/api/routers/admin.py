@@ -12,6 +12,7 @@ from app.models import (
     MatchResult,
     Student,
     Teacher,
+    TeacherStudentLink,
     User,
 )
 from app.schemas.common import APIResponse
@@ -184,3 +185,187 @@ def system_health(
         "last_check": datetime.now(timezone.utc).isoformat(),
         "version": "1.0.0",
     })
+
+
+# --- Teacher-Student Link CRUD ---
+
+@router.get("/teacher-student-links", response_model=APIResponse)
+def list_links(
+    skip: int = 0,
+    limit: int = 50,
+    teacher_id: int | None = None,
+    student_id: int | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    query = select(TeacherStudentLink).order_by(TeacherStudentLink.id)
+    if teacher_id:
+        query = query.where(TeacherStudentLink.teacher_id == teacher_id)
+    if student_id:
+        query = query.where(TeacherStudentLink.student_id == student_id)
+
+    total = len(db.scalars(query).all())
+    links = db.scalars(query.offset(skip).limit(limit)).all()
+
+    items = []
+    for link in links:
+        teacher = db.scalar(select(Teacher).where(Teacher.id == link.teacher_id))
+        teacher_user = db.scalar(select(User).where(User.id == teacher.user_id)) if teacher else None
+        student = db.scalar(select(Student).where(Student.id == link.student_id))
+        student_user = db.scalar(select(User).where(User.id == student.user_id)) if student else None
+
+        items.append({
+            "id": link.id,
+            "teacher_id": link.teacher_id,
+            "teacher_name": teacher_user.full_name if teacher_user else "未知",
+            "student_id": link.student_id,
+            "student_name": student_user.full_name if student_user else "未知",
+            "group_name": link.group_name,
+            "is_primary": link.is_primary,
+            "source": link.source,
+            "status": link.status,
+            "created_at": link.created_at.isoformat() if link.created_at else None,
+        })
+
+    return APIResponse(data={"total": total, "items": items})
+
+
+@router.post("/teacher-student-links", response_model=APIResponse)
+def create_link(
+    teacher_id: int,
+    student_id: int,
+    group_name: str = "",
+    is_primary: bool = True,
+    source: str = "manual",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    teacher = db.scalar(select(Teacher).where(Teacher.id == teacher_id))
+    if not teacher:
+        raise HTTPException(status_code=404, detail="教师不存在")
+    student = db.scalar(select(Student).where(Student.id == student_id))
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    # Check for existing active link
+    existing = db.scalar(
+        select(TeacherStudentLink).where(
+            TeacherStudentLink.teacher_id == teacher_id,
+            TeacherStudentLink.student_id == student_id,
+            TeacherStudentLink.status == "active",
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="该教师学生绑定关系已存在")
+
+    link = TeacherStudentLink(
+        teacher_id=teacher_id,
+        student_id=student_id,
+        group_name=group_name,
+        is_primary=is_primary,
+        source=source,
+        status="active",
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+
+    return APIResponse(data={"id": link.id, "teacher_id": link.teacher_id, "student_id": link.student_id, "status": link.status})
+
+
+@router.put("/teacher-student-links/{link_id}", response_model=APIResponse)
+def update_link(
+    link_id: int,
+    group_name: str | None = None,
+    is_primary: bool | None = None,
+    status: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    link = db.scalar(select(TeacherStudentLink).where(TeacherStudentLink.id == link_id))
+    if not link:
+        raise HTTPException(status_code=404, detail="绑定关系不存在")
+
+    if group_name is not None:
+        link.group_name = group_name
+    if is_primary is not None:
+        link.is_primary = is_primary
+    if status is not None:
+        link.status = status
+
+    db.commit()
+
+    return APIResponse(data={"id": link.id, "updated": True})
+
+
+@router.delete("/teacher-student-links/{link_id}", response_model=APIResponse)
+def delete_link(
+    link_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    link = db.scalar(select(TeacherStudentLink).where(TeacherStudentLink.id == link_id))
+    if not link:
+        raise HTTPException(status_code=404, detail="绑定关系不存在")
+
+    db.delete(link)
+    db.commit()
+
+    return APIResponse(data={"deleted": True, "id": link_id})
+
+
+@router.post("/teacher-student-links/import", response_model=APIResponse)
+def batch_import_links(
+    links: list[dict],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """Batch import teacher-student links."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    created = 0
+    skipped = 0
+    for item in links:
+        teacher_id = item.get("teacher_id")
+        student_id = item.get("student_id")
+        if not teacher_id or not student_id:
+            skipped += 1
+            continue
+
+        existing = db.scalar(
+            select(TeacherStudentLink).where(
+                TeacherStudentLink.teacher_id == teacher_id,
+                TeacherStudentLink.student_id == student_id,
+                TeacherStudentLink.status == "active",
+            )
+        )
+        if existing:
+            skipped += 1
+            continue
+
+        link = TeacherStudentLink(
+            teacher_id=teacher_id,
+            student_id=student_id,
+            group_name=item.get("group_name", ""),
+            is_primary=item.get("is_primary", True),
+            source="batch_import",
+            status="active",
+        )
+        db.add(link)
+        created += 1
+
+    db.commit()
+    return APIResponse(data={"created": created, "skipped": skipped})

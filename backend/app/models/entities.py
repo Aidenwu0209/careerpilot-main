@@ -404,3 +404,29 @@ class HistoryTitle(TimestampMixin, Base):
     record_type: Mapped[str] = mapped_column(String(40))
     ref_id: Mapped[int] = mapped_column(Integer)
     custom_title: Mapped[str] = mapped_column(String(200), default="")
+
+
+class TeacherComment(TimestampMixin, Base):
+    __tablename__ = "teacher_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("career_reports.id"), index=True)
+    analysis_run_id: Mapped[Optional[int]] = mapped_column(ForeignKey("analysis_runs.id"), nullable=True)
+    comment: Mapped[str] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
+    visible_to_student: Mapped[bool] = mapped_column(Boolean, default=True)
+    student_read_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class TeacherStudentLink(TimestampMixin, Base):
+    __tablename__ = "teacher_student_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_id: Mapped[int] = mapped_column(ForeignKey("teachers.id"), index=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), index=True)
+    group_name: Mapped[str] = mapped_column(String(100), default="")
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(60), default="manual")  # manual, invite_code, batch_import
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active, inactive

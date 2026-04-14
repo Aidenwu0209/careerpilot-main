@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarDrawer } from "@/components/SidebarDrawer";
 import { Icon } from "@/components/Icon";
-import { getTeacherAdvice, type TeacherAdviceItem } from "@/lib/api";
+import { getTeacherAdvice, updateFollowupStatus, type TeacherAdviceItem } from "@/lib/api";
 
 const teacherNavItems = [
   { href: "/teacher", label: "首页", icon: <Icon name="home" size={18} /> },
@@ -13,10 +13,24 @@ const teacherNavItems = [
   { href: "/teacher/advice", label: "指导建议", icon: <Icon name="chat" size={18} /> },
 ];
 
+const followupStatusLabels: Record<string, string> = {
+  pending: "待跟进",
+  in_progress: "跟进中",
+  read: "已读",
+  communicated: "已沟通",
+  review: "需复盘",
+  completed: "已完成",
+  overdue: "已逾期",
+};
+
 export default function TeacherAdvicePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [adviceItems, setAdviceItems] = useState<TeacherAdviceItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [notes, setNotes] = useState("");
+  const [followupDate, setFollowupDate] = useState("");
+  const [saving, setSaving] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -25,6 +39,24 @@ export default function TeacherAdvicePage() {
       .catch((e) => console.error("Failed to load advice:", e))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleFollowup = async (studentId: number, statusValue: string) => {
+    setSaving(true);
+    try {
+      await updateFollowupStatus(studentId, {
+        status: statusValue,
+        next_followup_date: followupDate || undefined,
+        teacher_notes: notes || undefined,
+      });
+      setNotes("");
+      setFollowupDate("");
+      setExpandedId(null);
+    } catch (e) {
+      console.error("Failed to update followup:", e);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -68,27 +100,69 @@ export default function TeacherAdvicePage() {
         ) : adviceItems.length > 0 ? (
           <div className="history-list">
             {adviceItems.map((item) => (
-              <div key={`${item.student_id}-${item.target_job}`} className="history-item">
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <p className="history-item__title" style={{ margin: 0 }}>
-                      {item.name} — {item.target_job}
-                    </p>
-                    {item.match_score > 0 && (
-                      <span style={{
-                        padding: "1px 8px",
-                        borderRadius: 10,
-                        fontSize: "0.6875rem",
-                        fontWeight: 600,
-                        background: item.match_score >= 80 ? "rgba(11, 123, 114, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                        color: item.match_score >= 80 ? "#0b7b72" : "#b76a09",
-                      }}>
-                        {item.match_score} 分
-                      </span>
-                    )}
+              <div key={`${item.student_id}-${item.target_job}`} style={{ marginBottom: 12 }}>
+                <div className="history-item" style={{ cursor: "pointer" }} onClick={() => setExpandedId(expandedId === item.student_id ? null : item.student_id)}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <p className="history-item__title" style={{ margin: 0 }}>
+                        {item.name} — {item.target_job}
+                      </p>
+                      {item.match_score > 0 && (
+                        <span style={{
+                          padding: "1px 8px", borderRadius: 10, fontSize: "0.6875rem", fontWeight: 600,
+                          background: item.match_score >= 80 ? "rgba(11, 123, 114, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                          color: item.match_score >= 80 ? "#0b7b72" : "#b76a09",
+                        }}>
+                          {item.match_score} 分
+                        </span>
+                      )}
+                    </div>
+                    <p className="history-item__desc">{item.advice}</p>
                   </div>
-                  <p className="history-item__desc">{item.advice}</p>
+                  <span style={{ fontSize: "0.8rem", color: "var(--subtle)" }}>
+                    {expandedId === item.student_id ? "收起 ▲" : "跟进 ▼"}
+                  </span>
                 </div>
+
+                {expandedId === item.student_id && item.student_id !== 0 && (
+                  <div style={{ background: "#f8fafc", borderRadius: 8, padding: 16, marginTop: 4 }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: 4 }}>教师备注</label>
+                      <textarea
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        placeholder="输入指导建议或跟进备注..."
+                        style={{ width: "100%", minHeight: 60, padding: 8, borderRadius: 6, border: "1px solid #d1d5db", fontSize: "0.85rem", resize: "vertical" }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: "0.85rem", fontWeight: 600, display: "block", marginBottom: 4 }}>下次跟进日期</label>
+                      <input
+                        type="date"
+                        value={followupDate}
+                        onChange={e => setFollowupDate(e.target.value)}
+                        style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "0.85rem" }}
+                      />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {Object.entries(followupStatusLabels).map(([key, label]) => (
+                        <button
+                          key={key}
+                          onClick={() => handleFollowup(item.student_id, key)}
+                          disabled={saving}
+                          style={{
+                            padding: "4px 12px", borderRadius: 6, fontSize: "0.8rem",
+                            border: "1px solid #d1d5db", background: "#fff",
+                            cursor: saving ? "not-allowed" : "pointer",
+                            opacity: saving ? 0.6 : 1,
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
