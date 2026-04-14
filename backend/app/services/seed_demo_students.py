@@ -21,6 +21,8 @@ from app.models import (
     MatchResult,
     Student,
     StudentProfile,
+    Teacher,
+    TeacherStudentLink,
     UploadedFile,
     User,
 )
@@ -492,6 +494,39 @@ def seed_demo_students(db: Session) -> int:
                 db.add(task)
 
         created_count += 1
+
+    # Ensure teacher_demo has a Teacher record and bindings to all demo students
+    teacher_user = db.scalar(select(User).where(User.username == "teacher_demo"))
+    if teacher_user:
+        teacher = db.scalar(select(Teacher).where(Teacher.user_id == teacher_user.id))
+        if not teacher:
+            teacher = Teacher(user_id=teacher_user.id)
+            db.add(teacher)
+            db.flush()
+
+        # Bind all demo students to this teacher
+        demo_student_ids = db.scalars(
+            select(Student.id).where(
+                Student.user_id.in_(
+                    select(User.id).where(User.username.like("demo_student_%"))
+                )
+            )
+        ).all()
+        for sid in demo_student_ids:
+            existing = db.scalar(
+                select(TeacherStudentLink).where(
+                    TeacherStudentLink.teacher_id == teacher.id,
+                    TeacherStudentLink.student_id == sid,
+                )
+            )
+            if not existing:
+                db.add(TeacherStudentLink(
+                    teacher_id=teacher.id,
+                    student_id=sid,
+                    is_primary=True,
+                    source="manual",
+                    status="active",
+                ))
 
     db.commit()
     return created_count
