@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -267,7 +267,7 @@ def get_recommended_jobs(
 
 @router.get("/me/history")
 def get_student_history(
-    type: Optional[str] = None,
+    record_type: Optional[str] = Query(None, alias="type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
@@ -277,7 +277,7 @@ def get_student_history(
     Returns all types when type is not specified.
     """
     VALID_TYPES = {"upload", "profile", "matching", "path", "report", "chat", "feedback"}
-    if type and type not in VALID_TYPES:
+    if record_type and record_type not in VALID_TYPES:
         return {"items": []}
 
     student = db.scalar(select(Student).where(Student.user_id == current_user.id))
@@ -287,7 +287,7 @@ def get_student_history(
     records = []
 
     # --- Upload records ---
-    if not type or type == "upload":
+    if not record_type or record_type == "upload":
         file_type_label = {"resume": "简历", "certificate": "证书", "transcript": "成绩单", "other": "其他材料"}
         uploads = list(db.scalars(
             select(UploadedFile)
@@ -308,7 +308,7 @@ def get_student_history(
             })
 
     # --- Profile version records ---
-    if not type or type == "profile":
+    if not record_type or record_type == "profile":
         profiles = list(db.scalars(
             select(ProfileVersion)
             .where(ProfileVersion.student_id == student.id)
@@ -330,7 +330,7 @@ def get_student_history(
             })
 
     # --- Matching records ---
-    if not type or type == "matching":
+    if not record_type or record_type == "matching":
         student_profile = db.scalar(
             select(StudentProfile).where(StudentProfile.student_id == student.id)
         )
@@ -360,7 +360,7 @@ def get_student_history(
                 })
 
     # --- Path planning records ---
-    if not type or type == "path":
+    if not record_type or record_type == "path":
         paths = list(db.scalars(
             select(PathRecommendation)
             .where(PathRecommendation.student_id == student.id)
@@ -386,7 +386,7 @@ def get_student_history(
             })
 
     # --- Report records ---
-    if not type or type == "report":
+    if not record_type or record_type == "report":
         reports = list(db.scalars(
             select(CareerReport)
             .where(CareerReport.student_id == student.id)
@@ -417,7 +417,7 @@ def get_student_history(
             })
 
     # --- Chat records ---
-    if not type or type == "chat":
+    if not record_type or record_type == "chat":
         chat_msgs = list(db.scalars(
             select(ChatMessageRecord)
             .where(ChatMessageRecord.user_id == current_user.id, ChatMessageRecord.role == "user")
@@ -437,7 +437,7 @@ def get_student_history(
             })
 
     # --- Teacher feedback records ---
-    if not type or type == "feedback":
+    if not record_type or record_type == "feedback":
         feedbacks = list(db.scalars(
             select(FollowupRecord)
             .where(FollowupRecord.student_id == student.id)
