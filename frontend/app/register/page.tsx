@@ -99,6 +99,9 @@ export default function RegisterPage() {
 
       localStorage.setItem("token", token);
       localStorage.setItem("user_role", role);
+      localStorage.setItem("user_id", String(data.user_id));
+      localStorage.setItem("username", data.username);
+      localStorage.removeItem("chat_messages");
       setCookie("auth_token", token);
       setCookie("user_role", role);
 

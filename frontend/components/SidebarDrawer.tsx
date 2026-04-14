@@ -130,6 +130,8 @@ export function RoleShell({ title, navItems, navLabel, children }: RoleShellProp
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user_role");
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("username");
     document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     document.cookie = "user_role=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     router.push("/login");
