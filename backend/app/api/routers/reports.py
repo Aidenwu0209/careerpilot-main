@@ -121,7 +121,10 @@ def export_report(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    exported = container.report_service.export_report(db, payload.report_id, payload.format)
+    try:
+        exported = container.report_service.export_report(db, payload.report_id, payload.format)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return ReportExportResponse(report_id=payload.report_id, exported=exported)
 
 
