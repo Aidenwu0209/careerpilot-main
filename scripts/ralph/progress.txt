@@ -4,7 +4,7 @@
 - Source PRD: tasks/prd-careerpilot-platform-optimization.md
 - Created: 2026-04-14
 - Total Stories: 38
-- Completed Stories: 8
+- Completed Stories: 10
 
 ## Codebase Patterns
 - 后端使用 FastAPI + SQLAlchemy 2.0（Mapped/mapped_column 声明式）+ SQLite/PostgreSQL
@@ -27,6 +27,9 @@
 - `resolve_target_job()` 在 `students.py` 中有 4 级优先级回退：手动确认 > career_goal 映射 > 最近匹配 > 空值
 - `ensure_demo_users()` 启动时创建 user_id=1（student_demo），测试中 dev-bypass 直接映射到该用户
 - 匹配、路径规划、报告路由均支持空 job_code 回退到已确认目标岗位
+- `CareerReport` 模型有 `profile_version_id`、`match_result_id`、`analysis_run_id` 上下文绑定字段，与 MatchResult/PathRecommendation 模式一致
+- 报告 `generate_report()` 接受 `analysis_run_id` 并自动从 run 回填 `profile_version_id` 和 `match_result_id`
+- `AnalysisRun.report_id` 会在报告生成时自动回写，形成双向绑定
 
 ## 2026-04-14 22:30 - US-001
 - 实现了多类型文件上传的校验与标准化元数据返回
@@ -298,4 +301,36 @@
   - 后端 `_path_to_dict` 在 router 层负责 backward compatibility，旧记录（只有 primary_path_json）会自动构建最小图谱
   - 路径页已有的垂直图谱使用 timeline rail 设计，换岗图谱使用 role node + path card 设计，是成熟的图谱化展示模式
   - 需要手动浏览器验证：当前能力起点区块、成长建议区块、空状态
+---
+
+## 2026-04-14 19:30 - US-014
+- 实现了完整职业规划报告正文的标准化组装
+  - 模型：`CareerReport` 新增 `profile_version_id`、`match_result_id`、`analysis_run_id` 三个上下文绑定字段
+  - Schema：`ReportContent` 重构为 11 个标准化 section（student_summary、resume_summary、capability_profile、target_job_analysis、matching_analysis、gap_analysis、career_path、short_term_plan、mid_term_plan、evaluation_cycle、teacher_comments）
+  - Schema：`ReportGenerateRequest` 新增 `analysis_run_id`、`profile_version_id`、`match_result_id` 参数
+  - Schema：`ReportResponse` 新增 `profile_version_id`、`match_result_id`、`analysis_run_id` 返回字段
+  - Service：`generate_report` 接受上下文 ID，自动从 `AnalysisRun` 回填 profile_version_id 和 match_result_id
+  - Service：报告生成后回写 `AnalysisRun.report_id`，形成双向绑定
+  - Service：`_check_evidence_sufficiency` 放宽 OCR 缺失限制，仅匹配结果缺失时阻止生成
+  - Mock LLM：`generate_report` 生成完整 11 section 的 content 和 11 章节的 markdown
+  - Mock LLM：markdown 从"一、学生基本情况"到"十一、教师建议"完整覆盖
+  - Router：`generate_report` 传递上下文 ID 到 service；`get_report` 返回绑定字段
+  - 前端：`ReportDraft` 类型新增 `profile_version_id`、`match_result_id`、`analysis_run_id` 字段
+  - 测试：新增 12 个测试用例覆盖 11 section 完整性、字段验证、上下文绑定、快照读取、AnalysisRun 回填
+- 更改的文件：
+  - `backend/app/models/entities.py` — CareerReport 新增绑定字段
+  - `backend/app/schemas/report.py` — ReportContent/Request/Response 重构
+  - `backend/app/services/reports/report_service.py` — generate_report 上下文绑定、evidence 检查放宽
+  - `backend/app/api/routers/reports.py` — 传递上下文 ID、返回绑定字段
+  - `backend/app/integrations/llm/providers.py` — Mock/Ernie generate_report 完整 11 section
+  - `frontend/lib/api.ts` — ReportDraft 类型更新
+  - `backend/tests/unit/test_report_assembly.py` — 新增测试文件
+- **未来迭代的学习：**
+  - `CareerReport` 与 `MatchResult`、`PathRecommendation` 存在循环 FK（analysis_runs ↔ career_reports ↔ match_results），SQLite drop_all 会有警告但不影响功能
+  - 报告缓存条件使用 `"学生基本情况" in report.markdown_content` 检测新旧格式，格式变更会自动触发重新生成
+  - `_check_evidence_sufficiency` 仅在 match_result 维度数据缺失时阻止生成，OCR 缺失不阻止（允许手动输入画像生成报告）
+  - `AnalysisRun.report_id` 在报告生成时回写，`AnalysisRun.match_result_id` 在匹配分析时回写，形成完整上下文链
+  - 前端 `ReportDraft.content` 类型为 `Record<string, unknown>`，新增 section 不需要前端类型变更
+  - 已有 3 个 pre-existing integration failures（auth 401），与本次改动无关
+---
 ---
