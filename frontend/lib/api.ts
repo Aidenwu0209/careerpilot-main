@@ -117,7 +117,7 @@ export async function getStudentSession(): Promise<StudentSession> {
   return request<StudentSession>("/students/me");
 }
 
-export async function updateTargetJob(jobCode: string, jobTitle: string): Promise<{ ok: boolean; target_job_code: string; target_job_title: string }> {
+export async function updateTargetJob(jobCode: string, jobTitle: string): Promise<{ ok: boolean; target_job_code: string; target_job_title: string; analysis_run_id: number | null }> {
   return request("/students/me/target-job", {
     method: "PUT",
     body: JSON.stringify({ job_code: jobCode, job_title: jobTitle }),

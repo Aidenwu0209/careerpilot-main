@@ -66,7 +66,10 @@ async def generate_report(
     if not job_code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无法确定目标岗位，请先选择或确认一个目标岗位")
 
-    result = await container.report_service.generate_report(db, payload.student_id, job_code)
+    try:
+        result = await container.report_service.generate_report(db, payload.student_id, job_code)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return ReportResponse(**result)
 
 

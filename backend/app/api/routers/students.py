@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 from app.api.deps import get_current_user, get_db_session
 from app.models import (
+    AnalysisRun,
     CareerReport,
     ChatMessageRecord,
     HistoryTitle,
@@ -140,10 +141,27 @@ def update_target_job(
     if not student:
         student = Student(user_id=current_user.id)
         db.add(student)
+        db.flush()
     student.target_job_code = payload.job_code
     student.target_job_title = payload.job_title
+
+    # Sync to the latest AnalysisRun for this student
+    latest_run = db.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.student_id == student.id)
+        .order_by(AnalysisRun.id.desc())
+        .limit(1)
+    )
+    if latest_run and latest_run.status in ("pending", "running"):
+        latest_run.target_job_code = payload.job_code
+
     db.commit()
-    return {"ok": True, "target_job_code": payload.job_code, "target_job_title": payload.job_title}
+    return {
+        "ok": True,
+        "target_job_code": payload.job_code,
+        "target_job_title": payload.job_title,
+        "analysis_run_id": latest_run.id if latest_run else None,
+    }
 
 
 @router.get("/me/recommended-jobs")

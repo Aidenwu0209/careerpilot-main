@@ -447,10 +447,15 @@ export default function StudentMainPage() {
     }
   };
 
-  const handleJobSelect = (code: string, title: string) => {
+  const handleJobSelect = async (code: string, title: string) => {
     setJobCode(code);
     setJobTitle(title);
-    updateTargetJob(code, title).catch(() => {});
+    try {
+      const result = await updateTargetJob(code, title);
+      if (result.analysis_run_id) {
+        setAnalysisRunId(result.analysis_run_id);
+      }
+    } catch {}
   };
 
   const fileTypeLabel: Record<string, string> = {

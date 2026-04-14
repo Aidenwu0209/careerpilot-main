@@ -5,7 +5,7 @@ from app.schemas.common import DimensionWeight
 
 class MatchingRequest(BaseModel):
     student_id: int = Field(..., gt=0)
-    job_code: str = Field(..., min_length=1, max_length=100)
+    job_code: str = Field(default="", max_length=100)
 
 
 class DimensionScore(BaseModel):
