@@ -36,6 +36,17 @@ export default function StudentPathPage() {
   useEffect(() => {
     (async () => {
       try {
+        // Load specific path result from active run via path_id param
+        const pathIdParam = searchParams.get("path_id");
+        if (pathIdParam) {
+          const pathId = parseInt(pathIdParam, 10);
+          if (!Number.isNaN(pathId)) {
+            setPlan(await getPathResult(pathId));
+            setLoading(false);
+            return;
+          }
+        }
+
         if (historyId && historyId.startsWith("path-")) {
           const pathId = parseInt(historyId.replace("path-", ""), 10);
           if (!Number.isNaN(pathId)) {
@@ -58,7 +69,7 @@ export default function StudentPathPage() {
         setLoading(false);
       }
     })();
-  }, [historyId]);
+  }, [historyId, searchParams]);
 
   const verticalNodes = (plan?.vertical_graph?.nodes ?? []) as VerticalNode[];
   const transitionRoles = (plan?.transition_graph?.role_paths ?? []) as TransitionRole[];

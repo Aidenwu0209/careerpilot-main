@@ -14,10 +14,12 @@ import {
   parseOCR,
   generateStudentProfile,
   getMatching,
+  getPathPlan,
   generateReport,
   getGreeting,
   updateTargetJob,
   startAnalysisRun,
+  getLatestAnalysis,
   updateAnalysisContext,
   markStepRunning,
   markStepComplete,
@@ -70,12 +72,13 @@ const ALLOWED_TYPES = ["application/pdf", "application/msword", "application/vnd
 const ALLOWED_EXTENSIONS = [".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const PIPELINE_STEP_KEYS = ["uploaded", "parsed", "profiled", "matched", "reported"] as const;
+const PIPELINE_STEP_KEYS = ["uploaded", "parsed", "profiled", "matched", "pathed", "reported"] as const;
 const PIPELINE_STEP_LABELS: Record<string, string> = {
   uploaded: "已上传",
   parsed: "已解析",
   profiled: "已生成画像",
   matched: "已匹配",
+  pathed: "已规划路径",
   reported: "已出报告",
 };
 
@@ -154,6 +157,9 @@ export default function StudentMainPage() {
   const [pipelineCompletedSteps, setPipelineCompletedSteps] = useState<Set<string>>(new Set());
   const [analysisRunId, setAnalysisRunId] = useState<number | null>(null);
   const [reportId, setReportId] = useState<number | null>(null);
+  const [matchResultId, setMatchResultId] = useState<number | null>(null);
+  const [profileVersionId, setProfileVersionId] = useState<number | null>(null);
+  const [pathRecommendationId, setPathRecommendationId] = useState<number | null>(null);
   const [jobSelectError, setJobSelectError] = useState("");
   const [jobSelectorDismissed, setJobSelectorDismissed] = useState(false);
   const [greeting, setGreeting] = useState({ title: "你好，想了解什么职业方向？", sub: "输入你感兴趣的岗位方向或上传简历，AI 帮你分析" });
@@ -187,6 +193,57 @@ export default function StudentMainPage() {
         }
       })
       .catch(() => {});
+
+    // Restore pipeline state from latest analysis run
+    (async () => {
+      try {
+        const run = await getLatestAnalysis();
+        if (run.status === "completed") {
+          const completed = new Set<string>();
+          for (const [key, done] of Object.entries(run.step_results ?? {})) {
+            if (done) completed.add(key);
+          }
+          setAnalysisRunId(run.run_id);
+          setReportId(run.report_id ?? null);
+          setMatchResultId(run.match_result_id ?? null);
+          setProfileVersionId(run.profile_version_id ?? null);
+          setPathRecommendationId(run.path_recommendation_id ?? null);
+          setPipelineCompletedSteps(completed);
+          setPipelineCurrent("reported");
+          setPipelineDone(true);
+          if (run.target_job_code) {
+            setJobCode(run.target_job_code);
+          }
+        } else if (run.status === "failed") {
+          const completed = new Set<string>();
+          for (const [key, done] of Object.entries(run.step_results ?? {})) {
+            if (done) completed.add(key);
+          }
+          setAnalysisRunId(run.run_id);
+          setPipelineCompletedSteps(completed);
+          setPipelineCurrent(run.current_step || run.failed_step);
+          setPipelineError(run.failed_step || run.current_step);
+          setPipelineErrorDetail(run.error_detail || undefined);
+          if (run.target_job_code) {
+            setJobCode(run.target_job_code);
+          }
+        } else if (run.status === "running") {
+          const completed = new Set<string>();
+          for (const [key, done] of Object.entries(run.step_results ?? {})) {
+            if (done) completed.add(key);
+          }
+          setAnalysisRunId(run.run_id);
+          setPipelineCompletedSteps(completed);
+          setPipelineCurrent(run.current_step);
+          setPipelineRunning(true);
+          if (run.target_job_code) {
+            setJobCode(run.target_job_code);
+          }
+        }
+      } catch {
+        // No previous run — start fresh
+      }
+    })();
   }, [refreshFiles, loadGreeting]);
 
   useEffect(() => {
@@ -292,10 +349,24 @@ export default function StudentMainPage() {
         if (matchResultId) {
           await updateAnalysisContext(runId, { match_result_id: matchResultId });
         }
+        setMatchResultId(matchResultId);
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
-        // Step 5: reported
+        // Step 5: pathed (career path planning)
+        currentStep = "pathed";
+        setPipelineCurrent(currentStep);
+        await markStepRunning(runId, currentStep);
+        const pathPlan = await getPathPlan(sid, jCode);
+        const pId = (pathPlan as Record<string, unknown>).path_id ?? (pathPlan as Record<string, unknown>).id ?? null;
+        if (pId && typeof pId === "number") {
+          await updateAnalysisContext(runId, { path_recommendation_id: pId });
+          setPathRecommendationId(pId);
+        }
+        await markStepComplete(runId, currentStep);
+        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
+
+        // Step 6: reported
         currentStep = "reported";
         setPipelineCurrent(currentStep);
         await markStepRunning(runId, currentStep);
@@ -308,12 +379,15 @@ export default function StudentMainPage() {
           report_id: report.report_id,
           profile_version_id: report.profile_version_id ?? profileVersionId,
           match_result_id: report.match_result_id ?? matchResultId,
-          path_recommendation_id: report.path_recommendation_id,
+          path_recommendation_id: report.path_recommendation_id ?? (typeof pId === "number" ? pId : null),
         });
         await markStepComplete(runId, currentStep);
         setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
         await markAnalysisComplete(runId);
         setReportId(report.report_id);
+        setProfileVersionId(report.profile_version_id ?? profileVersionId);
+        if (report.match_result_id) setMatchResultId(report.match_result_id);
+        if (report.path_recommendation_id) setPathRecommendationId(report.path_recommendation_id);
 
         setPipelineDone(true);
       } catch (err: unknown) {
@@ -581,16 +655,16 @@ export default function StudentMainPage() {
           🎉 分析完成！以下是你的能力档案和职业规划结果：
         </p>
         <div className="student-main__result-actions">
-          <Link href="/student/profile" className="btn-primary student-main__result-btn">
+          <Link href={profileVersionId ? `/student/profile?version_id=${profileVersionId}` : "/student/profile"} className="btn-primary student-main__result-btn">
             查看能力画像
           </Link>
           <Link href="/student/recommended" className="btn-primary student-main__result-btn student-main__result-btn--red">
             查看推荐岗位
           </Link>
-          <Link href="/student/matching" className="btn-primary student-main__result-btn student-main__result-btn--purple">
+          <Link href={matchResultId ? `/student/matching?match_id=${matchResultId}` : "/student/matching"} className="btn-primary student-main__result-btn student-main__result-btn--purple">
             查看匹配分析
           </Link>
-          <Link href="/student/path" className="btn-primary student-main__result-btn student-main__result-btn--teal">
+          <Link href={pathRecommendationId ? `/student/path?path_id=${pathRecommendationId}` : "/student/path"} className="btn-primary student-main__result-btn student-main__result-btn--teal">
             查看职业路径
           </Link>
           {reportId && (
@@ -773,6 +847,9 @@ export default function StudentMainPage() {
                 setPipelineCompletedSteps(new Set());
                 setAnalysisRunId(null);
                 setReportId(null);
+                setMatchResultId(null);
+                setProfileVersionId(null);
+                setPathRecommendationId(null);
                 setUploadError("");
                 setUploadSuccess("");
                 clearFiles().catch(() => {});

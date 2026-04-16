@@ -61,6 +61,18 @@ export default function StudentMatchingPage() {
   useEffect(() => {
     (async () => {
       try {
+        // Load specific match result from active run via match_id param
+        const matchIdParam = searchParams.get("match_id");
+        if (matchIdParam) {
+          const matchId = parseInt(matchIdParam, 10);
+          if (!isNaN(matchId)) {
+            const matching = await getMatchResult(matchId);
+            applyMatching(matching);
+            setLoading(false);
+            return;
+          }
+        }
+
         // Extract match ID from history parameter (format: "match-{id}")
         if (historyId && historyId.startsWith("match-")) {
           const matchId = parseInt(historyId.replace("match-", ""), 10);
@@ -81,7 +93,7 @@ export default function StudentMatchingPage() {
         applyMatching(matching);
       } catch {} finally { setLoading(false); }
     })();
-  }, [historyId]);
+  }, [historyId, searchParams]);
 
   function applyMatching(matching: Record<string, unknown> | null | undefined) {
     if (!matching) return;
