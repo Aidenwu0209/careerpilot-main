@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_student_owns_resource, get_container, get_current_user, get_db_session
 from app.api.routers.students import resolve_target_job
+from app.core.errors import require_role
 from app.models import CareerReport, Student, UploadedFile, User
 from app.schemas.report import (
     ReportCheckRequest,
@@ -27,8 +28,7 @@ def get_report(
     container: ServiceContainer = Depends(get_container),
     db: Session = Depends(get_db_session),
 ) -> ReportResponse:
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     try:
         report = container.report_service.get_report(db, report_id)
@@ -76,8 +76,7 @@ async def generate_report(
     db: Session = Depends(get_db_session),
 ) -> ReportResponse:
     # Verify user has access
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     ensure_student_owns_resource(current_user, db, payload.student_id)
 
@@ -109,8 +108,7 @@ async def polish_report(
     db: Session = Depends(get_db_session),
 ) -> ReportResponse:
     # Verify user has access
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == payload.report_id))
     if not report:
@@ -129,8 +127,7 @@ def check_report(
     db: Session = Depends(get_db_session),
 ) -> ReportCheckResponse:
     # Verify user has access
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == payload.report_id))
     if not report:
@@ -148,8 +145,7 @@ def export_report(
     db: Session = Depends(get_db_session),
 ) -> ReportExportResponse:
     # Verify user has access
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == payload.report_id))
     if not report:
@@ -170,8 +166,7 @@ def save_report(
     container: ServiceContainer = Depends(get_container),
     db: Session = Depends(get_db_session),
 ):
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == payload.report_id))
     if not report:

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import create_access_token, get_current_user, get_db_session
 from app.core.config import get_settings
+from app.core.errors import raise_invalid_credentials
 from app.models import User
 from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest
 from app.services.auth_service import authenticate, register_user
@@ -16,7 +17,7 @@ router = APIRouter()
 def login(payload: LoginRequest, db: Session = Depends(get_db_session)) -> LoginResponse:
     user = authenticate(db, payload.username, payload.password)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise_invalid_credentials(message="用户名或密码错误")
 
     settings = get_settings()
     access_token_expires = timedelta(hours=settings.jwt_expiration_hours)

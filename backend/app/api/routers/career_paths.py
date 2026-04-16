@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_student_owns_resource, get_container, get_current_user, get_db_session
 from app.api.routers.students import resolve_target_job
+from app.core.errors import raise_resource_forbidden, require_role
 from app.models import AnalysisRun, PathRecommendation, Student, User
 from app.schemas.common import APIResponse
 from app.services.bootstrap import ServiceContainer
@@ -30,8 +31,7 @@ async def plan_career_path(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     # Verify user has access
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     ensure_student_owns_resource(current_user, db, payload.student_id)
 
@@ -143,9 +143,8 @@ def get_path_result(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="学生信息不存在")
 
     if current_user.role == "student" and student.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问此记录")
+        raise_resource_forbidden()
 
-    if current_user.role not in ["student", "admin", "teacher"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     return APIResponse(data=_path_to_dict(path_result))
