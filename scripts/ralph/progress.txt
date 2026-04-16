@@ -12,6 +12,7 @@
 - Backend tests: some pre-existing failures in integration tests (auth issues) and unit tests (test_agents.py)
 - Student resource authorization: `ensure_student_owns_resource(user, db, student_id)` in deps.py checks Student.user_id matches current user for student role; admin/teacher bypass
 - NOT NULL constraints: TeacherComment.report_id, Resume.student_id — always provide valid values in test fixtures
+- CORS safety: global exception handler in main.py explicitly adds CORS headers to 500 responses as a belt-and-suspenders approach; endpoints that call LLM or complex DB queries must wrap all failure-prone operations in try/except
 
 ## 2026-04-17 01:00 - US-001
 - Implemented role route guard matrix with visible notice on cross-role redirect
