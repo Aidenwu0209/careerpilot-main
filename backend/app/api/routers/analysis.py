@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db_session
+from app.api.deps import ensure_student_owns_resource, get_current_user, get_db_session
 from app.models import AnalysisRun, Student, UploadedFile, User
 
 router = APIRouter()
@@ -102,6 +102,8 @@ def start_analysis(
     if current_user.role not in ("student", "admin", "teacher"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    ensure_student_owns_resource(current_user, db, payload.student_id)
+
     resume_file_id = _resolve_resume_file_id(db, payload.file_ids, payload.resume_file_id)
 
     run = AnalysisRun(
@@ -158,6 +160,8 @@ def get_analysis_state(
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
 
+    ensure_student_owns_resource(current_user, db, run.student_id)
+
     return _run_to_state(run)
 
 
@@ -174,6 +178,8 @@ def update_analysis_context(
     run = db.scalar(select(AnalysisRun).where(AnalysisRun.id == run_id))
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
+
+    ensure_student_owns_resource(current_user, db, run.student_id)
 
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
@@ -198,6 +204,8 @@ def mark_step_running(
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
 
+    ensure_student_owns_resource(current_user, db, run.student_id)
+
     run.status = "running"
     run.current_step = step_key
     run.failed_step = ""
@@ -221,6 +229,8 @@ def mark_step_complete(
     run = db.scalar(select(AnalysisRun).where(AnalysisRun.id == run_id))
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
+
+    ensure_student_owns_resource(current_user, db, run.student_id)
 
     results = dict(run.step_results) if run.step_results else {}
     results[step_key] = True
@@ -247,6 +257,8 @@ def mark_step_failed(
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
 
+    ensure_student_owns_resource(current_user, db, run.student_id)
+
     run.status = "failed"
     run.current_step = step_key
     run.failed_step = step_key
@@ -267,6 +279,8 @@ def mark_analysis_complete(
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
 
+    ensure_student_owns_resource(current_user, db, run.student_id)
+
     run.status = "completed"
     run.current_step = "reported"
     db.commit()
@@ -284,6 +298,8 @@ def reset_analysis(
     run = db.scalar(select(AnalysisRun).where(AnalysisRun.id == run_id))
     if not run:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分析记录不存在")
+
+    ensure_student_owns_resource(current_user, db, run.student_id)
 
     run.status = "pending"
     run.current_step = ""

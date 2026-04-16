@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_container, get_current_user, get_db_session
+from app.api.deps import ensure_student_owns_resource, get_container, get_current_user, get_db_session
 from app.api.routers.students import resolve_target_job
 from app.models import MatchDimensionScore, MatchResult, Student, User
 from app.schemas.matching import MatchingRequest, MatchingResponse
@@ -21,6 +21,8 @@ def analyze_matching(
     # Verify user has access
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    ensure_student_owns_resource(current_user, db, payload.student_id)
 
     job_code = payload.job_code
     if not job_code:

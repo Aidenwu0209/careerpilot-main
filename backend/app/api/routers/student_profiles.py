@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_container, get_current_user, get_db_session
+from app.api.deps import ensure_student_owns_resource, get_container, get_current_user, get_db_session
 from app.models import ProfileVersion, User
 from app.schemas.profile import StudentProfileGenerateRequest, StudentProfileOut, ProfileVersionOut
 from app.services.bootstrap import ServiceContainer
@@ -19,6 +19,8 @@ async def generate_student_profile(
 ) -> StudentProfileOut:
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    ensure_student_owns_resource(current_user, db, payload.student_id)
 
     try:
         result = await container.student_profile_service.generate_profile(
@@ -43,6 +45,8 @@ def get_student_profile(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    ensure_student_owns_resource(current_user, db, student_id)
+
     result = container.student_profile_service.get_profile(db, student_id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="学生画像不存在")
@@ -57,6 +61,8 @@ def get_profile_versions(
 ):
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    ensure_student_owns_resource(current_user, db, student_id)
 
     versions = list(db.scalars(
         select(ProfileVersion)
@@ -82,6 +88,8 @@ def get_profile_version_detail(
 ) -> ProfileVersionOut:
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    ensure_student_owns_resource(current_user, db, student_id)
 
     v = db.scalar(
         select(ProfileVersion)

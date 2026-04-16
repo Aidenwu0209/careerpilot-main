@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models import User
+from app.models import Student, User
 from app.services.bootstrap import ServiceContainer
 
 
@@ -77,4 +77,19 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def ensure_student_owns_resource(current_user: User, db: Session, student_id: int) -> None:
+    """Verify the student_id belongs to the current user for student role.
+
+    Admin and teacher roles bypass this check — they have their own
+    authorization layer in teacher.py / admin.py.
+    """
+    if current_user.role == "student":
+        student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+        if not student or student.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权访问此资源",
+            )
 

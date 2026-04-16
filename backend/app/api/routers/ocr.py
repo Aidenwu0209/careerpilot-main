@@ -30,6 +30,12 @@ async def parse_document(
     if current_user.role not in ["student", "admin", "teacher"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    # Verify file ownership for student role when file_id is provided
+    if payload.uploaded_file_id and current_user.role == "student":
+        uploaded = db.get(UploadedFile, payload.uploaded_file_id)
+        if not uploaded or uploaded.owner_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问此文件")
+
     try:
         if payload.uploaded_file_id:
             result = await container.file_service.parse_uploaded_file(db, payload.uploaded_file_id, payload.document_type)
