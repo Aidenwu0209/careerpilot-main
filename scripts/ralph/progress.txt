@@ -5,7 +5,9 @@
 - Roles: student, teacher, admin — mapped to route prefixes /student, /teacher, /admin
 - Each role portal has its own sidebar/topbar; student has a layout.tsx wrapper, teacher/admin handle layout in each page.tsx
 - Icon component at `frontend/components/Icon.tsx` — must check available icon names before use (no "warning" icon, use "alert-circle")
-- Backend auth: JWT via python-jose, role stored in User.role field, checked inline in every endpoint (no centralized RBAC decorator)
+- Backend auth: JWT via python-jose, role stored in User.role field
+- Backend error standardization: ALL routers use `errors.py` functions (`require_role`, `raise_resource_forbidden`, `raise_unauthorized`, `raise_invalid_credentials`) for auth/role/ownership errors — no inline HTTPException for 401/403
+- Error response format: structured dict `{"message": "...", "error_code": "AUTH_REQUIRED|INVALID_CREDENTIALS|INSUFFICIENT_ROLE|RESOURCE_FORBIDDEN"}`
 - Backend dev bypass: token "dev-bypass" accepted in non-production env, maps to user_id=1
 - Backend tests: some pre-existing failures in integration tests (auth issues) and unit tests (test_agents.py)
 - Student resource authorization: `ensure_student_owns_resource(user, db, student_id)` in deps.py checks Student.user_id matches current user for student role; admin/teacher bypass
@@ -60,4 +62,23 @@
 - **未来迭代的学习：**
   - `errors.py` 的所有 `raise_*` 函数返回结构化 `detail` dict（含 `message` 和 `error_code` 字段），任何测试断言 `detail` 内容时必须先判断类型：`detail["message"] if isinstance(detail, dict) else detail`
   - 其他测试文件（如 `test_target_job_confirmation.py`）也可能有类似的 `assert "..." in resp.json()["detail"]` 断言，如果对应的端点也使用了 `errors.py` 的辅助函数，需要同样修复
+---
+
+## 2026-04-17 17:00 - US-004
+- 将所有路由文件中的内联 HTTPException 401/403 调用替换为 `errors.py` 标准化函数
+- 替换了 11 个路由文件中共 32 个内联错误调用：26 个角色门 → `require_role()`，5 个所有权检查 → `raise_resource_forbidden()`，1 个认证错误 → `raise_invalid_credentials()`
+- 已标准化的路由：reports, matching, career_paths, student_profiles, ocr, files, auth, jobs, scheduler, agents, graph
+- 已使用标准化函数的路由（无需修改）：teacher, admin, analysis, students
+- 创建了 `test_unauthorized_response_standard.py` 包含 13 个测试：
+  - 3 个未认证测试（AUTH_REQUIRED）
+  - 2 个无效凭证测试（INVALID_CREDENTIALS）
+  - 3 个角色不足测试（INSUFFICIENT_ROLE）
+  - 2 个资源禁止测试（RESOURCE_FORBIDDEN）
+  - 3 个响应结构一致性测试
+- 所有 52 个测试通过（13 新 + 39 已有），无回归
+- Changed files: 11 个路由文件 + 新测试文件
+- **未来迭代的学习：**
+  - `require_role()` 和 `raise_resource_forbidden()` 已覆盖全部路由，未来新增端点直接使用 `errors.py` 即可
+  - 登录失败（`auth.py`）现在也返回结构化 `INVALID_CREDENTIALS` 错误码，前端可以据此区分"未登录"和"登录失败"
+  - 非 auth 相关的 HTTPException（400、404 等）未改动，这些是业务逻辑错误而非权限错误，保持内联是合理的
 ---

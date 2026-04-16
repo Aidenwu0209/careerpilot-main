@@ -8,11 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_student_owns_resource, get_current_user, get_db_session
+from app.core.errors import require_role
 from app.models import AnalysisRun, Student, UploadedFile, User
 
 router = APIRouter()
 
-VALID_STEPS = ("uploaded", "parsed", "profiled", "matched", "reported")
+VALID_STEPS = ("uploaded", "parsed", "profiled", "matched", "pathed", "reported")
 
 
 class AnalysisStartRequest(BaseModel):
@@ -27,6 +28,7 @@ class AnalysisStartResponse(BaseModel):
     status: str
     current_step: str
     step_results: dict[str, Any]
+    ordered_steps: list[str]
     uploaded_file_ids: list[int]
     resume_file_id: int | None
     target_job_code: str | None
@@ -43,6 +45,7 @@ class AnalysisStateResponse(BaseModel):
     failed_step: str
     error_detail: str
     step_results: dict[str, Any]
+    ordered_steps: list[str]
     uploaded_file_ids: list[int]
     resume_file_id: int | None
     profile_version_id: int | None
@@ -68,6 +71,7 @@ def _run_to_state(run: AnalysisRun) -> AnalysisStateResponse:
         failed_step=run.failed_step,
         error_detail=run.error_detail,
         step_results=run.step_results,
+        ordered_steps=list(VALID_STEPS),
         uploaded_file_ids=run.uploaded_file_ids or [],
         resume_file_id=run.resume_file_id,
         profile_version_id=run.profile_version_id,
@@ -99,8 +103,7 @@ def start_analysis(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> AnalysisStartResponse:
-    if current_user.role not in ("student", "admin", "teacher"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     ensure_student_owns_resource(current_user, db, payload.student_id)
 
@@ -123,6 +126,7 @@ def start_analysis(
         status=run.status,
         current_step=run.current_step,
         step_results=run.step_results,
+        ordered_steps=list(VALID_STEPS),
         uploaded_file_ids=run.uploaded_file_ids or [],
         resume_file_id=run.resume_file_id,
         target_job_code=run.target_job_code,
@@ -172,8 +176,7 @@ def update_analysis_context(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> AnalysisStateResponse:
-    if current_user.role not in ("student", "admin", "teacher"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "student", "admin", "teacher")
 
     run = db.scalar(select(AnalysisRun).where(AnalysisRun.id == run_id))
     if not run:
