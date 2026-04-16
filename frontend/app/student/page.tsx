@@ -163,6 +163,8 @@ export default function StudentMainPage() {
   const [jobSelectError, setJobSelectError] = useState("");
   const [jobSelectorDismissed, setJobSelectorDismissed] = useState(false);
   const [incompleteRunData, setIncompleteRunData] = useState(false);
+  const [runFileIds, setRunFileIds] = useState<number[]>([]);
+  const [retrying, setRetrying] = useState(false);
   const [greeting, setGreeting] = useState({ title: "你好，想了解什么职业方向？", sub: "输入你感兴趣的岗位方向或上传简历，AI 帮你分析" });
 
   const refreshFiles = useCallback(async () => {
@@ -209,6 +211,7 @@ export default function StudentMainPage() {
           setMatchResultId(run.match_result_id ?? null);
           setProfileVersionId(run.profile_version_id ?? null);
           setPathRecommendationId(run.path_recommendation_id ?? null);
+          setRunFileIds(run.uploaded_file_ids ?? []);
           // Detect data incompleteness: completed run but missing report_id
           const hasMissingData = !run.report_id;
           if (hasMissingData) {
@@ -228,6 +231,7 @@ export default function StudentMainPage() {
             if (done) completed.add(key);
           }
           setAnalysisRunId(run.run_id);
+          setRunFileIds(run.uploaded_file_ids ?? []);
           setPipelineCompletedSteps(completed);
           setPipelineCurrent(run.current_step || run.failed_step);
           setPipelineError(run.failed_step || run.current_step);
@@ -241,6 +245,7 @@ export default function StudentMainPage() {
             if (done) completed.add(key);
           }
           setAnalysisRunId(run.run_id);
+          setRunFileIds(run.uploaded_file_ids ?? []);
           setPipelineCompletedSteps(completed);
           setPipelineCurrent(run.current_step);
           setPipelineRunning(true);
@@ -318,6 +323,7 @@ export default function StudentMainPage() {
         setPipelineErrorDetail(undefined);
         setPipelineCompletedSteps(new Set());
         setIncompleteRunData(false);
+        setRunFileIds(fileIds);
       } else {
         setPipelineError(null);
         setPipelineErrorDetail(undefined);
@@ -430,18 +436,19 @@ export default function StudentMainPage() {
     [profileVersionId, matchResultId],
   );
 
-  const retryPipeline = useCallback(() => {
-    if (!session?.student_id || !jobCode || uploadedFiles.length === 0) return;
-    const fileIds = uploadedFiles.map((f) => f.id);
-    const errorIdx = pipelineError
-      ? PIPELINE_STEP_KEYS.indexOf(pipelineError as typeof PIPELINE_STEP_KEYS[number])
+  const retryPipeline = useCallback((fromStepKey?: string) => {
+    const sid = session?.student_id;
+    if (!sid || !jobCode) return;
+    // Use uploaded files if loaded, fall back to file IDs from the analysis run
+    const fileIds = uploadedFiles.length > 0
+      ? uploadedFiles.map((f) => f.id)
+      : runFileIds;
+    if (fileIds.length === 0) return;
+    const failedStep = fromStepKey ?? pipelineError;
+    const errorIdx = failedStep
+      ? PIPELINE_STEP_KEYS.indexOf(failedStep as typeof PIPELINE_STEP_KEYS[number])
       : 0;
     const startKey = PIPELINE_STEP_KEYS[Math.max(0, errorIdx)];
-
-    // Reset backend state if we have a run ID
-    if (analysisRunId) {
-      resetAnalysisRun(analysisRunId).catch(() => {});
-    }
 
     // Reset completed steps to those before the failed step
     const completed = new Set<string>();
@@ -452,10 +459,16 @@ export default function StudentMainPage() {
     setPipelineCurrent(startKey);
     setPipelineError(null);
     setPipelineErrorDetail(undefined);
+    setRetrying(true);
 
-    // Re-run pipeline from the failed step
-    runPipeline(session.student_id, jobCode, fileIds);
-  }, [session, jobCode, uploadedFiles, pipelineError, analysisRunId, runPipeline]);
+    // Re-run pipeline from the failed step, reusing the same run.
+    // No need to call resetAnalysisRun — markStepRunning already clears failed_step/error_detail
+    // and preserves step_results for completed steps.
+    runPipeline(sid, jobCode, fileIds, {
+      resumeFromStep: startKey,
+      existingRunId: analysisRunId ?? undefined,
+    }).finally(() => setRetrying(false));
+  }, [session, jobCode, uploadedFiles, runFileIds, pipelineError, analysisRunId, runPipeline]);
 
   const handleSend = async () => {
     const text = query.trim();
@@ -651,12 +664,57 @@ export default function StudentMainPage() {
       pipelineCompletedSteps,
     );
 
+    const failedStepLabel = pipelineError ? PIPELINE_STEP_LABELS[pipelineError] : null;
+
     return (
       <div className="student-main__pipeline-wrap">
         <PipelineProgress
           steps={steps}
           onRetry={retryPipeline}
         />
+        {pipelineError && !pipelineRunning && (
+          <div className="student-main__pipeline-error-banner">
+            <div className="student-main__pipeline-error-banner-header">
+              <Icon name="alert-circle" size={18} color="#dc2626" />
+              <span className="student-main__pipeline-error-banner-title">
+                {failedStepLabel ?? pipelineError} 步骤失败
+              </span>
+            </div>
+            {pipelineErrorDetail && (
+              <p className="student-main__pipeline-error-banner-detail">{pipelineErrorDetail}</p>
+            )}
+            <div className="student-main__pipeline-error-banner-actions">
+              <button
+                className="student-main__pipeline-error-retry-btn"
+                onClick={() => retryPipeline(pipelineError ?? undefined)}
+                disabled={pipelineRunning || retrying}
+              >
+                {retrying ? "重试中…" : "重试失败步骤"}
+              </button>
+              <button
+                className="student-main__pipeline-error-restart-btn"
+                onClick={() => {
+                  setPipelineError(null);
+                  setPipelineErrorDetail(undefined);
+                  setPipelineCurrent(null);
+                  setPipelineDone(false);
+                  setPipelineCompletedSteps(new Set());
+                  setAnalysisRunId(null);
+                  setReportId(null);
+                  setMatchResultId(null);
+                  setProfileVersionId(null);
+                  setPathRecommendationId(null);
+                  setIncompleteRunData(false);
+                  setRunFileIds([]);
+                  setRetrying(false);
+                }}
+                disabled={pipelineRunning || retrying}
+              >
+                重新开始
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -882,6 +940,8 @@ export default function StudentMainPage() {
                 setProfileVersionId(null);
                 setPathRecommendationId(null);
                 setIncompleteRunData(false);
+                setRunFileIds([]);
+                setRetrying(false);
                 setUploadError("");
                 setUploadSuccess("");
                 clearFiles().catch(() => {});

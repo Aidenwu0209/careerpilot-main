@@ -2219,6 +2219,84 @@ a[aria-label] {
   margin: 0 auto 16px;
 }
 
+.student-main__pipeline-error-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-top: 12px;
+}
+
+.student-main__pipeline-error-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.student-main__pipeline-error-banner-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #dc2626;
+}
+
+.student-main__pipeline-error-banner-detail {
+  font-size: 0.8125rem;
+  color: #991b1b;
+  margin: 0 0 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.student-main__pipeline-error-banner-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.student-main__pipeline-error-retry-btn {
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.student-main__pipeline-error-retry-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.student-main__pipeline-error-retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.student-main__pipeline-error-restart-btn {
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.student-main__pipeline-error-restart-btn:hover:not(:disabled) {
+  background: #f9fafb;
+  color: #374151;
+}
+
+.student-main__pipeline-error-restart-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .student-main__result-area {
   max-width: 720px;
   margin: 0 auto 16px;
