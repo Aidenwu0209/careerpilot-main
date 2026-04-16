@@ -2086,6 +2086,49 @@ a[aria-label] {
   margin: 8px 0 0;
 }
 
+.student-main__upload-card.is-uploaded {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  cursor: default;
+}
+
+.student-main__upload-card.is-uploaded:hover {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  box-shadow: none;
+}
+
+.student-main__upload-card-text--done {
+  color: #16a34a;
+}
+
+.student-main__step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.student-main__step-indicator--done {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+}
+
+.student-main__step-indicator-file {
+  font-size: 0.8125rem;
+  color: #666;
+  font-weight: 400;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .student-main__file-list {
   margin-top: 14px;
   width: 100%;

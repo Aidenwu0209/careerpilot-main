@@ -155,6 +155,7 @@ export default function StudentMainPage() {
   const [analysisRunId, setAnalysisRunId] = useState<number | null>(null);
   const [reportId, setReportId] = useState<number | null>(null);
   const [jobSelectError, setJobSelectError] = useState("");
+  const [jobSelectorDismissed, setJobSelectorDismissed] = useState(false);
   const [greeting, setGreeting] = useState({ title: "你好，想了解什么职业方向？", sub: "输入你感兴趣的岗位方向或上传简历，AI 帮你分析" });
 
   const refreshFiles = useCallback(async () => {
@@ -432,8 +433,9 @@ export default function StudentMainPage() {
     try {
       const uploaded = await uploadFile(file, userId, "resume");
       await refreshFiles();
-      setUploadSuccess(`${file.name} 上传成功`);
-      setTimeout(() => setUploadSuccess(""), 3000);
+      setUploadSuccess(`${file.name} 上传成功，请选择目标岗位开始分析`);
+      setJobSelectorDismissed(false);
+      setTimeout(() => setUploadSuccess(""), 5000);
 
       if (session?.student_id && jobCode) {
         runPipeline(session.student_id, jobCode, [uploaded.id]);
@@ -604,7 +606,7 @@ export default function StudentMainPage() {
     );
   };
 
-  const needsJobSelect = !jobCode && uploadedFiles.length > 0 && !pipelineRunning && !pipelineDone;
+  const needsJobSelect = !jobCode && uploadedFiles.length > 0 && !pipelineRunning && !pipelineDone && !jobSelectorDismissed;
   const inputIsCompact = isLoading || pipelineRunning;
   const isHistoricalChatView = historyId && historyId.startsWith("chat-");
 
@@ -647,18 +649,43 @@ export default function StudentMainPage() {
 
       {needsJobSelect && (
         <div style={{ maxWidth: 720, margin: "0 auto 16px" }}>
+          <div className="student-main__step-indicator student-main__step-indicator--done">
+            <Icon name="check-circle" size={16} color="#16a34a" />
+            <span>简历上传成功</span>
+            {uploadedFiles.length > 0 && (
+              <span className="student-main__step-indicator-file">{uploadedFiles[uploadedFiles.length - 1].file_name}</span>
+            )}
+          </div>
           <JobSelector
             onSelect={async (code, title) => {
               const saved = await handleJobSelect(code, title);
               if (session?.student_id) {
-                // Start pipeline regardless — the job code is passed directly to startAnalysisRun
-                // If the target-job save failed, the error is shown above but pipeline can still proceed
                 const fileIds = uploadedFiles.map((f) => f.id);
                 runPipeline(session.student_id, code, fileIds);
               }
             }}
+            onCancel={() => {
+              setJobSelectorDismissed(true);
+              setJobSelectError("");
+            }}
           />
           {jobSelectError && <p className="student-main__upload-error">{jobSelectError}</p>}
+        </div>
+      )}
+
+      {!needsJobSelect && !jobCode && uploadedFiles.length > 0 && !pipelineRunning && !pipelineDone && jobSelectorDismissed && (
+        <div style={{ maxWidth: 720, margin: "0 auto 16px", textAlign: "center" }}>
+          <div className="student-main__step-indicator student-main__step-indicator--done">
+            <Icon name="check-circle" size={16} color="#16a34a" />
+            <span>简历已上传</span>
+          </div>
+          <button
+            className="btn-primary"
+            style={{ marginTop: 8, fontSize: "0.875rem", padding: "6px 16px" }}
+            onClick={() => setJobSelectorDismissed(false)}
+          >
+            选择目标岗位
+          </button>
         </div>
       )}
 
@@ -693,23 +720,34 @@ export default function StudentMainPage() {
               </div>
               <input ref={fileInputRef} hidden type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={handleFile} />
               <button
-                className={`student-main__upload-card${isDraggingUpload ? " is-dragging" : ""}`}
-                onClick={() => { if (!isUploading) fileInputRef.current?.click(); }}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingUpload(true); }}
+                className={`student-main__upload-card${isDraggingUpload ? " is-dragging" : ""}${needsJobSelect ? " is-uploaded" : ""}`}
+                onClick={() => { if (!isUploading && !needsJobSelect) fileInputRef.current?.click(); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (!needsJobSelect) setIsDraggingUpload(true); }}
                 onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingUpload(false); }}
                 onDrop={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   dragDepthRef.current = 0;
                   setIsDraggingUpload(false);
+                  if (needsJobSelect) return;
                   const file = e.dataTransfer.files?.[0];
                   if (file) processFile(file);
                 }}
-                disabled={isUploading || pipelineRunning}
+                disabled={isUploading || pipelineRunning || needsJobSelect}
               >
-                <span className="student-main__upload-card-icon">{isUploading ? <Icon name="loading" size={20} spin /> : <Icon name="file" size={20} />}</span>
-                <span className="student-main__upload-card-text">{isUploading ? "正在上传…" : pipelineRunning ? "分析进行中…" : "点击上传简历或将文件拖拽到这里"}</span>
-                <span className="student-main__upload-card-hint">支持 PDF / Word / 图片，上传后自动生成你的能力档案和匹配报告</span>
+                {needsJobSelect ? (
+                  <>
+                    <span className="student-main__upload-card-icon"><Icon name="check-circle" size={20} color="#16a34a" /></span>
+                    <span className="student-main__upload-card-text student-main__upload-card-text--done">简历上传成功</span>
+                    <span className="student-main__upload-card-hint">请在上方选择目标岗位开始分析</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="student-main__upload-card-icon">{isUploading ? <Icon name="loading" size={20} spin /> : <Icon name="file" size={20} />}</span>
+                    <span className="student-main__upload-card-text">{isUploading ? "正在上传…" : pipelineRunning ? "分析进行中…" : "点击上传简历或将文件拖拽到这里"}</span>
+                    <span className="student-main__upload-card-hint">支持 PDF / Word / 图片，上传后自动生成你的能力档案和匹配报告</span>
+                  </>
+                )}
               </button>
               {uploadError && <p className="student-main__upload-error">{uploadError}</p>}
               {uploadSuccess && <p className="student-main__upload-success">{uploadSuccess}</p>}
