@@ -146,7 +146,7 @@
       "priority": 8,
       "passes": true,
       "notes": "",
-      "retryCount": 2,
+      "retryCount": 0,
       "blocked": false
     },
     {
@@ -162,7 +162,7 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false

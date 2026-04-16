@@ -175,3 +175,34 @@
   - `?history=match-{id}` 和 `?match_id={id}` 的区别：前者标记为 "历史数据"（isHistoricalView=true），后者不标记，用于当前运行的结果查看
   - 需要手动浏览器验证：完整分析流程 + 页面刷新后状态恢复 + 结果入口链接导航
 ---
+## 2026-04-17 07:13 - US-008 (retry 3)
+- 修复了恢复已完成 run 时 report_id 为 null 导致的数据不一致显示问题
+- 新增 `incompleteRunData` 状态变量，检测已完成但 report_id 缺失的 run
+- 恢复状态时：如果 report_id 为 null，从 pipelineCompletedSteps 中移除 "reported"，将 pipelineCurrent 设为 "pathed"，pipelineDone 设为 false
+- "查看完整报告" 按钮：当 reportId 为 null 时显示为灰色不可点击的 "报告未生成" 占位符，而非链接到会 404 的页面
+- 显示明确的警告提示："该次分析数据不完整（未生成报告），建议重新分析"
+- "开启新话题" 和 runPipeline 正确重置 incompleteRunData 状态
+- TypeScript 类型检查通过，仅修改前端文件，无后端回归
+- Changed files: `frontend/app/student/page.tsx`
+- **未来迭代的学习：**
+  - 旧 run 数据（在功能部署前创建的）可能缺少新功能引入的字段（如 report_id），恢复状态时必须检查关键字段是否存在
+  - `pipelineDone` 和 `pipelineCompletedSteps` 是 UI 显示的主要依据，当数据不完整时不应将两者都设为"完成"状态
+  - 占位符按钮（灰色、不可点击）是处理缺失数据的好模式，避免用户点击后遇到错误页面
+---
+
+## 2026-04-17 07:34 - US-009
+- 添加了错误横幅的完整 CSS 样式（之前只有 class 名但无样式定义，错误信息不可见）
+- 修复了 retryPipeline 的竞态条件：移除了不必要的 `resetAnalysisRun` 调用（fire-and-forget 会导致后端状态不一致），`markStepRunning` 已自动清除 `failed_step` 和 `error_detail`
+- 添加 `runFileIds` 状态变量，从分析运行恢复时存储 `uploaded_file_ids`，解决页面刷新后重试静默失败的问题
+- 添加 `retrying` 状态变量，在重试期间禁用所有重试/重启按钮，防止重复点击
+- 重试流程现在正确复用同一运行 ID 并保留已完成步骤的 step_results（不再清除）
+- TypeScript 类型检查通过，21 个后端测试全部通过
+- Changed files: `frontend/app/globals.css`, `frontend/app/student/page.tsx`
+- **未来迭代的学习：**
+  - 错误横幅使用 `globals.css` 中的全局样式而非 `style jsx`，新增错误展示样式应添加到 `globals.css` 中
+  - `markStepRunning` 端点已经清除 `failed_step` 和 `error_detail`，重试时不需要额外调用 `resetAnalysisRun`
+  - `resetAnalysisRun` 会清除所有 `step_results`，不适合重试场景（会丢失已完成步骤数据）
+  - 页面刷新后的异步数据加载存在竞态条件：分析运行状态可能先于文件列表加载完成，重试功能必须使用存储的 file IDs 作为回退
+  - `AnalysisRunState.uploaded_file_ids` 包含运行关联的文件 ID 列表，可用于重试时传递给后端
+  - 需要手动浏览器验证：完整失败路径 + 重试流程 + 页面刷新后重试
+---
