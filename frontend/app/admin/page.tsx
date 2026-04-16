@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarDrawer } from "@/components/SidebarDrawer";
 import { Icon } from "@/components/Icon";
+import { AccessDeniedNotice } from "@/components/AccessDeniedNotice";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import {
   getAdminUsers,
@@ -99,6 +100,7 @@ export default function AdminPage() {
       </div>
 
       <div className="admin-dashboard">
+        <AccessDeniedNotice />
         {loading ? (
           <div style={{ textAlign: "center", padding: 48, color: "var(--subtle)" }}>加载中...</div>
         ) : (

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarDrawer } from "@/components/SidebarDrawer";
 import { Icon } from "@/components/Icon";
+import { AccessDeniedNotice } from "@/components/AccessDeniedNotice";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
   getTeacherStudentReports,
@@ -150,6 +151,7 @@ export default function TeacherPage() {
       </div>
 
       <div className="teacher-dashboard">
+        <AccessDeniedNotice />
         {loading ? (
           <div style={{ textAlign: "center", padding: 48, color: "var(--subtle)" }}>加载中...</div>
         ) : (
