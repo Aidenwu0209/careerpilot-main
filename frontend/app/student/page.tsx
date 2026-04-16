@@ -154,6 +154,7 @@ export default function StudentMainPage() {
   const [pipelineCompletedSteps, setPipelineCompletedSteps] = useState<Set<string>>(new Set());
   const [analysisRunId, setAnalysisRunId] = useState<number | null>(null);
   const [reportId, setReportId] = useState<number | null>(null);
+  const [jobSelectError, setJobSelectError] = useState("");
   const [greeting, setGreeting] = useState({ title: "你好，想了解什么职业方向？", sub: "输入你感兴趣的岗位方向或上传简历，AI 帮你分析" });
 
   const refreshFiles = useCallback(async () => {
@@ -495,7 +496,8 @@ export default function StudentMainPage() {
     }
   };
 
-  const handleJobSelect = async (code: string, title: string) => {
+  const handleJobSelect = async (code: string, title: string): Promise<boolean> => {
+    setJobSelectError("");
     setJobCode(code);
     setJobTitle(title);
     try {
@@ -503,7 +505,15 @@ export default function StudentMainPage() {
       if (result.analysis_run_id) {
         setAnalysisRunId(result.analysis_run_id);
       }
-    } catch {}
+      return true;
+    } catch (err) {
+      const msg = err instanceof APIError
+        ? (err.isNetworkError ? "无法连接到服务器，请确认后端服务已启动" : `保存失败：${err.message}`)
+        : "目标岗位保存失败，请稍后重试";
+      setJobSelectError(msg);
+      console.error("[handleJobSelect] Failed to save target job:", msg);
+      return false;
+    }
   };
 
   const fileTypeLabel: Record<string, string> = {
@@ -638,14 +648,17 @@ export default function StudentMainPage() {
       {needsJobSelect && (
         <div style={{ maxWidth: 720, margin: "0 auto 16px" }}>
           <JobSelector
-            onSelect={(code, title) => {
-              handleJobSelect(code, title);
+            onSelect={async (code, title) => {
+              const saved = await handleJobSelect(code, title);
               if (session?.student_id) {
+                // Start pipeline regardless — the job code is passed directly to startAnalysisRun
+                // If the target-job save failed, the error is shown above but pipeline can still proceed
                 const fileIds = uploadedFiles.map((f) => f.id);
                 runPipeline(session.student_id, code, fileIds);
               }
             }}
           />
+          {jobSelectError && <p className="student-main__upload-error">{jobSelectError}</p>}
         </div>
       )}
 

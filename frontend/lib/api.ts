@@ -217,10 +217,11 @@ export async function getJobTemplates(): Promise<JobDetail[]> {
     const response = await request<{ data: JobDetail[] }>("/jobs/profiles/templates");
     return response.data;
   } catch (error) {
-    console.warn("[Fallback] Using demo data for job templates:", error instanceof Error ? error.message : error);
-    if (process.env.NODE_ENV === "development") {
+    if (error instanceof APIError && error.isNetworkError && process.env.NODE_ENV === "development") {
+      console.warn("[Fallback] Using demo data for job templates due to network error");
       return demoJobTemplates;
     }
+    console.error("[getJobTemplates] Failed to load job templates:", error instanceof Error ? error.message : error);
     throw error;
   }
 }
