@@ -410,8 +410,13 @@ def overview_stats(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+
     # 1. 学生总数
-    total_students = db.scalar(select(func.count(Student.id))) or 0
+    student_count_query = select(func.count(Student.id))
+    if bound_ids is not None:
+        student_count_query = student_count_query.where(Student.id.in_(bound_ids))
+    total_students = db.scalar(student_count_query) or 0
 
     # 2. 已上传简历人数 — students who have at least one resume-type UploadedFile
     resume_file_owner_ids = db.scalars(
@@ -422,37 +427,47 @@ def overview_stats(
     # Map owner_id (user_id) → student_id
     students_with_resume = 0
     if resume_file_owner_ids:
-        students_with_resume = db.scalar(
-            select(func.count(Student.id)).where(Student.user_id.in_(resume_file_owner_ids))
-        ) or 0
+        resume_query = select(func.count(Student.id)).where(Student.user_id.in_(resume_file_owner_ids))
+        if bound_ids is not None:
+            resume_query = resume_query.where(Student.id.in_(bound_ids))
+        students_with_resume = db.scalar(resume_query) or 0
 
     # 3. 已生成画像人数 — students with at least one StudentProfile
-    students_with_profile = db.scalar(
-        select(func.count(func.distinct(StudentProfile.student_id)))
-    ) or 0
+    profile_query = select(func.count(func.distinct(StudentProfile.student_id)))
+    if bound_ids is not None:
+        profile_query = profile_query.where(StudentProfile.student_id.in_(bound_ids))
+    students_with_profile = db.scalar(profile_query) or 0
 
     # 4. 已生成报告人数 — students with at least one CareerReport
-    students_with_report = db.scalar(
-        select(func.count(func.distinct(CareerReport.student_id)))
-    ) or 0
+    report_query = select(func.count(func.distinct(CareerReport.student_id)))
+    if bound_ids is not None:
+        report_query = report_query.where(CareerReport.student_id.in_(bound_ids))
+    students_with_report = db.scalar(report_query) or 0
 
     # 5. 平均匹配分数
     avg_match_score = 0.0
-    all_scores = db.scalars(select(MatchResult.total_score)).all()
+    score_query = select(MatchResult.total_score).join(
+        StudentProfile, MatchResult.student_profile_id == StudentProfile.id
+    )
+    if bound_ids is not None:
+        score_query = score_query.where(StudentProfile.student_id.in_(bound_ids))
+    all_scores = db.scalars(score_query).all()
     if all_scores:
         avg_match_score = round(sum(all_scores) / len(all_scores), 1)
 
     # 6. 待点评报告数 — reports in draft status (not yet reviewed)
-    pending_review = db.scalar(
-        select(func.count(CareerReport.id)).where(CareerReport.status == "draft")
-    ) or 0
+    draft_query = select(func.count(CareerReport.id)).where(CareerReport.status == "draft")
+    if bound_ids is not None:
+        draft_query = draft_query.where(CareerReport.student_id.in_(bound_ids))
+    pending_review = db.scalar(draft_query) or 0
 
     # 7. 待跟进学生数 — students with GrowthTask in pending/overdue status
-    followup_student_ids = db.scalars(
-        select(func.distinct(GrowthTask.student_id)).where(
-            GrowthTask.status.in_(["pending", "overdue"])
-        )
-    ).all()
+    followup_query = select(func.distinct(GrowthTask.student_id)).where(
+        GrowthTask.status.in_(["pending", "overdue"])
+    )
+    if bound_ids is not None:
+        followup_query = followup_query.where(GrowthTask.student_id.in_(bound_ids))
+    followup_student_ids = db.scalars(followup_query).all()
     students_need_followup = len(followup_student_ids)
 
     return APIResponse(data={
@@ -591,24 +606,36 @@ def class_overview(
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
 
-    total_students = db.scalar(select(func.count(Student.id))) or 0
+    bound_ids = _get_teacher_bound_student_ids(current_user, db)
+
+    student_count_query = select(func.count(Student.id))
+    if bound_ids is not None:
+        student_count_query = student_count_query.where(Student.id.in_(bound_ids))
+    total_students = db.scalar(student_count_query) or 0
 
     # Job distribution
-    job_rows = db.execute(
+    job_query = (
         select(Student.career_goal, func.count(Student.id))
         .where(Student.career_goal != "")
         .group_by(Student.career_goal)
-    ).all()
+    )
+    if bound_ids is not None:
+        job_query = job_query.where(Student.id.in_(bound_ids))
+    job_rows = db.execute(job_query).all()
     job_distribution = [{"name": row[0], "value": row[1]} for row in job_rows]
 
     # Report completion rate
-    students_with_report = db.scalar(
-        select(func.count(func.distinct(CareerReport.student_id)))
-    ) or 0
+    report_count_query = select(func.count(func.distinct(CareerReport.student_id)))
+    if bound_ids is not None:
+        report_count_query = report_count_query.where(CareerReport.student_id.in_(bound_ids))
+    students_with_report = db.scalar(report_count_query) or 0
     report_completion_rate = round(students_with_report / total_students * 100, 1) if total_students > 0 else 0.0
 
     # Resume completeness distribution
-    profiles = db.scalars(select(StudentProfile)).all()
+    profile_query = select(StudentProfile)
+    if bound_ids is not None:
+        profile_query = profile_query.where(StudentProfile.student_id.in_(bound_ids))
+    profiles = db.scalars(profile_query).all()
     completeness_buckets = {"高(80%+)": 0, "中(50-79%)": 0, "低(<50%)": 0}
     for p in profiles:
         score = p.completeness_score or 0
@@ -620,9 +647,14 @@ def class_overview(
             completeness_buckets["低(<50%)"] += 1
     resume_completeness = [{"name": k, "value": v} for k, v in completeness_buckets.items()]
 
-    # Skill gaps top N — aggregate from all match results
+    # Skill gaps top N — aggregate from match results for bound students
+    gap_query = select(MatchResult).join(
+        StudentProfile, MatchResult.student_profile_id == StudentProfile.id
+    )
+    if bound_ids is not None:
+        gap_query = gap_query.where(StudentProfile.student_id.in_(bound_ids))
     all_gaps = []
-    for mr in db.scalars(select(MatchResult)).all():
+    for mr in db.scalars(gap_query).all():
         all_gaps.extend(mr.gaps_json or [])
     gap_counts: dict[str, int] = {}
     for g in all_gaps:
@@ -635,11 +667,12 @@ def class_overview(
     )[:10]
 
     # Students needing followup
-    followup_students = db.scalars(
-        select(func.distinct(GrowthTask.student_id)).where(
-            GrowthTask.status.in_(["pending", "overdue"])
-        )
-    ).all()
+    followup_query = select(func.distinct(GrowthTask.student_id)).where(
+        GrowthTask.status.in_(["pending", "overdue"])
+    )
+    if bound_ids is not None:
+        followup_query = followup_query.where(GrowthTask.student_id.in_(bound_ids))
+    followup_students = db.scalars(followup_query).all()
     followup_list = []
     for sid in followup_students:
         stu = db.scalar(select(Student).where(Student.id == sid))
@@ -677,6 +710,8 @@ def update_followup_status(
     student = db.scalar(select(Student).where(Student.id == student_id))
     if not student:
         raise HTTPException(status_code=404, detail="学生不存在")
+
+    _ensure_teacher_can_access_student(current_user, db, student_id)
 
     # Find or create a GrowthTask for followup tracking
     task = db.scalar(
@@ -752,6 +787,8 @@ def create_comment(
     if not report:
         raise HTTPException(status_code=404, detail="报告不存在")
 
+    _ensure_teacher_can_access_student(current_user, db, report.student_id)
+
     valid_priorities = ["low", "normal", "high", "urgent"]
     if priority not in valid_priorities:
         raise HTTPException(status_code=400, detail=f"优先级无效，允许值：{', '.join(valid_priorities)}")
@@ -790,6 +827,12 @@ def list_comments(
     """List all comments for a report."""
     if current_user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+
+    report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
+    if not report:
+        raise HTTPException(status_code=404, detail="报告不存在")
+
+    _ensure_teacher_can_access_student(current_user, db, report.student_id)
 
     comments = db.scalars(
         select(TeacherComment)
@@ -834,6 +877,8 @@ def update_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="点评不存在")
 
+    _ensure_teacher_can_access_student(current_user, db, comment.student_id)
+
     if comment.teacher_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只能修改自己的点评")
 
@@ -872,6 +917,8 @@ def delete_comment(
     comment = db.scalar(select(TeacherComment).where(TeacherComment.id == comment_id))
     if not comment:
         raise HTTPException(status_code=404, detail="点评不存在")
+
+    _ensure_teacher_can_access_student(current_user, db, comment.student_id)
 
     if comment.teacher_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只能删除自己的点评")
