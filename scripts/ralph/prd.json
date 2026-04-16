@@ -90,7 +90,7 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "",
       "retryCount": 0,
       "blocked": false
@@ -108,9 +108,9 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "",
-      "retryCount": 0,
+      "passes": true,
+      "notes": "[retry 2 通过] 2026-04-17\n- 修复了全局异常处理器（global_exception_handler）不在 500 响应中包含 CORS 头的问题——对匹配 allowed_origins 的 Origin 显式写入 Access-Control-Allow-Origin / Access-Control-Allow-Credentials / Vary\n- 重构 greeting 端点：将 _build_user_context 和数据库查询各自包裹 try/except，提取 _fallback_greeting 辅助函数，确保任何异常都返回有效 GreetingResponse 而非 500\n- redirect_slashes=False 已在 main.py 中设置，/files 路径不再触发重定向\n- AC1-AC4 和 AC6 已在上次验证通过，本次修复解决了 AC5 中 CORS 阻塞的根因\n- 77 个单元测试全部通过，TypeScript 类型检查通过",
+      "retryCount": 1,
       "blocked": false
     },
     {

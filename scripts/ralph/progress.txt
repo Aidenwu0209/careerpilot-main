@@ -82,3 +82,47 @@
   - 登录失败（`auth.py`）现在也返回结构化 `INVALID_CREDENTIALS` 错误码，前端可以据此区分"未登录"和"登录失败"
   - 非 auth 相关的 HTTPException（400、404 等）未改动，这些是业务逻辑错误而非权限错误，保持内联是合理的
 ---
+
+## 2026-04-17 18:00 - US-005
+- 添加了 "pathed" 步骤到 VALID_STEPS，从 5 步扩展到 6 步：uploaded → parsed → profiled → matched → pathed → reported
+- 在 AnalysisStartResponse 和 AnalysisStateResponse 中添加了 `ordered_steps` 字段，返回有序步骤列表
+- 更新了 `_run_to_state()` 和 `start_analysis` 返回值以包含 `ordered_steps`
+- 创建了 `test_analysis_run_orchestration.py` 包含 8 个测试：
+  - 3 个成功运行测试（全步骤完成、上下文绑定、有序步骤在所有响应中返回）
+  - 3 个失败运行测试（失败阶段记录、已完成步骤保留、重置清除错误）
+  - 2 个隔离测试（两个运行独立上下文、无效步骤拒绝）
+- 所有 25 个 analysis 相关测试通过（8 新 + 17 已有），无回归
+- Changed files: `backend/app/api/routers/analysis.py`, `backend/tests/unit/test_analysis_run_orchestration.py`
+- **未来迭代的学习：**
+  - 分析管道的 6 个步骤：`uploaded`（简历上传）→ `parsed`（OCR解析）→ `profiled`（能力画像）→ `matched`（岗位匹配）→ `pathed`（职业路径）→ `reported`（完整报告）
+  - 管道是客户端驱动的：后端只跟踪状态，前端（或 agent）需要按顺序调用 step-marking 端点
+  - `mark_step_running` 清除 `failed_step` 和 `error_detail`，适合重试场景
+  - `reset_analysis` 重置所有进度但不删除记录，保留 run_id 不变
+---
+
+## 2026-04-17 19:30 - US-006
+- 修复了 `getJobTemplates` 函数在所有错误（不仅仅是网络错误）情况下都回退到 demo 数据的问题，改为仅在后端完全不可达（isNetworkError）时回退
+- 修复了 `handleJobSelect` 中空 catch 块静默吞没 `updateTargetJob` 后端失败的问题，添加了明确的错误消息展示给用户
+- 添加了 `jobSelectError` 状态变量，在 JobSelector 下方显示错误信息
+- 使 JobSelector 的 `onSelect` 回调正确 await `handleJobSelect`，确保后端响应可观察
+- TypeScript 类型检查通过，后端 13 个测试全部通过
+- Changed files: `frontend/lib/api.ts`, `frontend/app/student/page.tsx`
+- **未来迭代的学习：**
+  - 前端 `api.ts` 中多个函数（`getMatching`、`generateReport`、`getPathPlan`、`getStudentProfile`）在开发模式下网络错误时回退到 demo 数据，但这些仅在 `isNetworkError && NODE_ENV === "development"` 时触发，不影响正常后端运行
+  - `uploadFile` 函数没有 demo 回退，总是调用真实后端端点，这是正确的行为
+  - `processFile` 函数已有完善的错误处理（显示 uploadError），上传流程的错误可见性良好
+  - `runPipeline` 中的管道错误已经通过 `pipelineError`/`pipelineErrorDetail` 状态正确展示
+  - 目标职位选择流程：`updateTargetJob` 调用 `PUT /students/me/target-job` 保存偏好，`startAnalysisRun` 调用 `POST /analysis/start` 启动管道，两者都传递 job_code 所以即使偏好保存失败管道仍可运行
+---
+
+## 2026-04-17 04:49 - US-006 (retry 2)
+- 修复了全局异常处理器（`global_exception_handler`）返回 500 时缺少 CORS 头的问题：对匹配 `allowed_origins` 的请求 Origin 显式写入 `Access-Control-Allow-Origin`、`Access-Control-Allow-Credentials`、`Vary: Origin`
+- 重构 greeting 端点：将 `_build_user_context` 和数据库查询各自包裹 try/except，确保任何异常都返回 fallback GreetingResponse 而非 500
+- 提取 `_fallback_greeting` 辅助函数，保持 DRY
+- 77 个单元测试全部通过，TypeScript 类型检查通过
+- Changed files: `backend/app/main.py`, `backend/app/api/routers/chat.py`
+- **未来迭代的学习：**
+  - FastAPI 的 `@app.exception_handler(Exception)` 处理器返回的 `JSONResponse` 虽然理论上会经过 CORSMiddleware，但在某些 Starlette 版本中可能不会正确添加 CORS 头。最佳实践是在异常处理器中**显式添加 CORS 头**作为安全保障
+  - `greeting` 端点调用 LLM 时可能在 `_build_user_context` 阶段就因数据库查询失败而抛异常，必须将所有可能失败的操作（包括 DB 查询）都包裹在 try/except 中
+  - `redirect_slashes=False` 已在 main.py 中设置，消除了 `/files` → `/files/` 重定向导致 CORS 头丢失的风险
+---
