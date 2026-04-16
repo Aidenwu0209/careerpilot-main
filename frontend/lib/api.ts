@@ -454,7 +454,7 @@ export type UploadedFileInfo = {
 };
 
 export async function listFiles(): Promise<UploadedFileInfo[]> {
-  const res = await request<{ data: UploadedFileInfo[] }>("/files");
+  const res = await request<{ data: UploadedFileInfo[] }>("/files/");
   return res.data ?? [];
 }
 
