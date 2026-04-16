@@ -38,3 +38,15 @@
   - Students router (`/students/me/*`) 不需要 `ensure_student_owns_resource`，因为所有查询都基于 `current_user.id` 隐式过滤
   - Chat 端点 (`/chat/*`) 不需要额外授权检查，因为消息总是以 `current_user.id` 存储/查询
 ---
+
+## 2026-04-17 02:28 - US-003
+- Added teacher-student binding check (`_ensure_teacher_can_access_student`) to `update_comment` and `delete_comment` endpoints, closing a gap where a teacher could modify their own comments on reports for students no longer bound to them
+- All 13 existing teacher authorization tests pass (followup, comment CRUD, report detail, overview stats)
+- 26 student authorization tests also pass (no regression)
+- Changed files: `backend/app/api/routers/teacher.py`, `backend/tests/unit/test_teacher_resource_authorization.py`
+- **未来迭代的学习：**
+  - `teacher.py` 中的 `_get_teacher_bound_student_ids` 返回 `None` 表示 admin（不筛选），空列表表示无绑定学生的 teacher
+  - `_ensure_teacher_can_access_student` 对 admin 自动绕过；admin 权限检查分散在各端点的 role 检查中
+  - TeacherComment 的 `teacher_id` 字段存的是 `User.id`（不是 `Teacher.id`），这是有意设计——直接对应 JWT 中的 user_id
+  - Comment 的 update/delete 端点需要同时检查绑定关系和所有权：先检查绑定（学生是否在教师班级），再检查所有权（评论是否是该教师写的）
+---
