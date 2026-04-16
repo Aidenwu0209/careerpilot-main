@@ -100,7 +100,9 @@ class TestAnalysisAuthorization:
             headers=headers_a,
         )
         assert resp.status_code == 403
-        assert "无权" in resp.json()["detail"]
+        detail = resp.json()["detail"]
+        # errors.py returns structured detail dict
+        assert "无权" in (detail["message"] if isinstance(detail, dict) else detail)
 
     def test_student_can_start_own_analysis(self, client: TestClient, db_session: Session):
         """POST /api/v1/analysis/start should succeed for own student_id."""

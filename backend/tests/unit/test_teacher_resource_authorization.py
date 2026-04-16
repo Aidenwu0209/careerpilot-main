@@ -137,7 +137,9 @@ class TestFollowupAuthorization:
             headers=headers_a,
         )
         assert resp.status_code == 403
-        assert "无权" in resp.json()["detail"]
+        detail = resp.json()["detail"]
+        # errors.py returns structured detail dict
+        assert "无权" in (detail["message"] if isinstance(detail, dict) else detail)
 
     def test_admin_can_update_followup_for_any_student(self, client: TestClient, db_session: Session):
         """Admin can bypass teacher-student binding check."""
