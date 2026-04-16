@@ -146,7 +146,7 @@
       "priority": 8,
       "passes": true,
       "notes": "",
-      "retryCount": 0,
+      "retryCount": 2,
       "blocked": false
     },
     {
