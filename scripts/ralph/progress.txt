@@ -8,6 +8,8 @@
 - Backend auth: JWT via python-jose, role stored in User.role field, checked inline in every endpoint (no centralized RBAC decorator)
 - Backend dev bypass: token "dev-bypass" accepted in non-production env, maps to user_id=1
 - Backend tests: some pre-existing failures in integration tests (auth issues) and unit tests (test_agents.py)
+- Student resource authorization: `ensure_student_owns_resource(user, db, student_id)` in deps.py checks Student.user_id matches current user for student role; admin/teacher bypass
+- NOT NULL constraints: TeacherComment.report_id, Resume.student_id — always provide valid values in test fixtures
 
 ## 2026-04-17 01:00 - US-001
 - Implemented role route guard matrix with visible notice on cross-role redirect
@@ -20,4 +22,19 @@
   - Middleware does NOT verify JWT — only checks cookie existence. This is acceptable for now but could be a future hardening target.
   - Admin review routes are hardcoded in middleware. If new student/teacher pages are added, the `adminReviewAllowed` array must be updated.
   - Browser testing needed: manual verification of login, cross-role redirect, and notice display for all three roles.
+---
+
+## 2026-04-17 02:05 - US-002
+- Implemented `ensure_student_owns_resource` dependency in `deps.py` that verifies student_id belongs to the authenticated user (JWT-based). Admin/teacher roles bypass the check.
+- Applied the authorization check to all student-facing router endpoints: analysis (start, read, update context, reset, step transitions), student_profiles (generate, read, versions), reports (read, generate, polish, check, export, save), matching (analyze, read match result), career_paths (plan, read path), OCR (parse, result listing, result detail).
+- Added inline ownership checks for endpoints that don't take `student_id` directly (matching GET by match_id, career_paths GET by path_id, OCR file ownership).
+- Created comprehensive test suite `test_student_resource_authorization.py` with 26 tests covering: analysis (7), profiles (3), reports (4), matching (2), career paths (2), OCR (1), chat (3), teacher feedback (2), history (2).
+- All 26 tests pass; TypeScript typecheck passes.
+- Changed files: `backend/app/api/deps.py`, `backend/app/api/routers/analysis.py`, `backend/app/api/routers/career_paths.py`, `backend/app/api/routers/matching.py`, `backend/app/api/routers/ocr.py`, `backend/app/api/routers/reports.py`, `backend/app/api/routers/student_profiles.py`, `backend/tests/unit/test_student_resource_authorization.py`
+- **未来迭代的学习：**
+  - `ensure_student_owns_resource` 只检查 student 角色；admin 和 teacher 自动绕过，teacher 的授权检查在 US-003 中处理
+  - `TeacherComment.report_id` 是 NOT NULL 的，创建测试数据时必须提供有效的 report_id
+  - `Resume.student_id` 也是 NOT NULL 的，创建测试数据时需要提供 student_id
+  - Students router (`/students/me/*`) 不需要 `ensure_student_owns_resource`，因为所有查询都基于 `current_user.id` 隐式过滤
+  - Chat 端点 (`/chat/*`) 不需要额外授权检查，因为消息总是以 `current_user.id` 存储/查询
 ---
