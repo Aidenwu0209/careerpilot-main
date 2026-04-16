@@ -162,6 +162,7 @@ export default function StudentMainPage() {
   const [pathRecommendationId, setPathRecommendationId] = useState<number | null>(null);
   const [jobSelectError, setJobSelectError] = useState("");
   const [jobSelectorDismissed, setJobSelectorDismissed] = useState(false);
+  const [incompleteRunData, setIncompleteRunData] = useState(false);
   const [greeting, setGreeting] = useState({ title: "你好，想了解什么职业方向？", sub: "输入你感兴趣的岗位方向或上传简历，AI 帮你分析" });
 
   const refreshFiles = useCallback(async () => {
@@ -208,9 +209,16 @@ export default function StudentMainPage() {
           setMatchResultId(run.match_result_id ?? null);
           setProfileVersionId(run.profile_version_id ?? null);
           setPathRecommendationId(run.path_recommendation_id ?? null);
+          // Detect data incompleteness: completed run but missing report_id
+          const hasMissingData = !run.report_id;
+          if (hasMissingData) {
+            // Remove "reported" from completed steps since no report exists
+            completed.delete("reported");
+          }
+          setIncompleteRunData(hasMissingData);
           setPipelineCompletedSteps(completed);
-          setPipelineCurrent("reported");
-          setPipelineDone(true);
+          setPipelineCurrent(hasMissingData ? "pathed" : "reported");
+          setPipelineDone(!hasMissingData);
           if (run.target_job_code) {
             setJobCode(run.target_job_code);
           }
@@ -292,103 +300,109 @@ export default function StudentMainPage() {
   }, []);
 
   const runPipeline = useCallback(
-    async (sid: number, jCode: string, fileIds: number[]) => {
-      setPipelineRunning(true);
-      setPipelineDone(false);
-      setPipelineError(null);
-      setPipelineErrorDetail(undefined);
-      setPipelineCompletedSteps(new Set());
+    async (
+      sid: number,
+      jCode: string,
+      fileIds: number[],
+      options?: { resumeFromStep?: string; existingRunId?: number },
+    ) => {
+      const { resumeFromStep, existingRunId } = options ?? {};
+      const startIdx = resumeFromStep
+        ? PIPELINE_STEP_KEYS.indexOf(resumeFromStep as typeof PIPELINE_STEP_KEYS[number])
+        : 0;
 
-      let runId: number | null = null;
-      // Track current step locally to avoid stale closure on pipelineCurrent
-      let currentStep: string = "uploaded";
-      let profileVersionId: number | null = null;
-      let matchResultId: number | null = null;
+      setPipelineRunning(true);
+      if (!resumeFromStep) {
+        setPipelineDone(false);
+        setPipelineError(null);
+        setPipelineErrorDetail(undefined);
+        setPipelineCompletedSteps(new Set());
+        setIncompleteRunData(false);
+      } else {
+        setPipelineError(null);
+        setPipelineErrorDetail(undefined);
+      }
+
+      let runId: number | null = existingRunId ?? null;
+      // Track current step locally to avoid stale closure
+      let currentStep: string = startIdx >= 0 ? PIPELINE_STEP_KEYS[Math.max(0, startIdx)] : "uploaded";
+      let localProfileVersionId = profileVersionId;
+      let localMatchResultId = matchResultId;
 
       try {
-        // Start backend analysis run
-        const run = await startAnalysisRun(sid, jCode, fileIds);
-        runId = run.run_id;
-        setAnalysisRunId(runId);
-
-        // Step 1: uploaded
-        currentStep = "uploaded";
-        setPipelineCurrent(currentStep);
-        await markStepRunning(runId, currentStep);
-        await markStepComplete(runId, currentStep);
-        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
-
-        // Step 2: parsed (OCR)
-        currentStep = "parsed";
-        setPipelineCurrent(currentStep);
-        await markStepRunning(runId, currentStep);
-        for (const fid of fileIds) {
-          await parseOCR(fid, "resume");
+        // Create a new run only when not resuming
+        if (!runId) {
+          const run = await startAnalysisRun(sid, jCode, fileIds);
+          runId = run.run_id;
+          setAnalysisRunId(runId);
         }
-        await markStepComplete(runId, currentStep);
-        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
-        // Step 3: profiled
-        currentStep = "profiled";
-        setPipelineCurrent(currentStep);
-        await markStepRunning(runId, currentStep);
-        const profile = await generateStudentProfile(sid, fileIds);
-        profileVersionId = profile.profile_version_id ?? null;
-        if (profileVersionId) {
-          await updateAnalysisContext(runId, { profile_version_id: profileVersionId });
+        for (let i = Math.max(0, startIdx); i < PIPELINE_STEP_KEYS.length; i++) {
+          const step = PIPELINE_STEP_KEYS[i];
+          currentStep = step;
+          setPipelineCurrent(step);
+          await markStepRunning(runId, step);
+
+          switch (step) {
+            case "uploaded":
+              // File already uploaded — just mark complete
+              break;
+            case "parsed":
+              for (const fid of fileIds) {
+                await parseOCR(fid, "resume");
+              }
+              break;
+            case "profiled": {
+              const profile = await generateStudentProfile(sid, fileIds);
+              localProfileVersionId = profile.profile_version_id ?? null;
+              if (localProfileVersionId) {
+                await updateAnalysisContext(runId, { profile_version_id: localProfileVersionId });
+              }
+              break;
+            }
+            case "matched": {
+              const matching = await getMatching(sid, jCode, localProfileVersionId, runId);
+              localMatchResultId = matching.match_result_id ?? null;
+              if (localMatchResultId) {
+                await updateAnalysisContext(runId, { match_result_id: localMatchResultId });
+              }
+              setMatchResultId(localMatchResultId);
+              break;
+            }
+            case "pathed": {
+              const pathPlan = await getPathPlan(sid, jCode);
+              const pId = (pathPlan as Record<string, unknown>).path_id ?? (pathPlan as Record<string, unknown>).id ?? null;
+              if (pId && typeof pId === "number") {
+                await updateAnalysisContext(runId, { path_recommendation_id: pId });
+                setPathRecommendationId(pId);
+              }
+              break;
+            }
+            case "reported": {
+              const report = await generateReport(sid, jCode, {
+                analysis_run_id: runId,
+                profile_version_id: localProfileVersionId,
+                match_result_id: localMatchResultId,
+              });
+              await updateAnalysisContext(runId, {
+                report_id: report.report_id,
+                profile_version_id: report.profile_version_id ?? localProfileVersionId,
+                match_result_id: report.match_result_id ?? localMatchResultId,
+                path_recommendation_id: report.path_recommendation_id ?? null,
+              });
+              setReportId(report.report_id);
+              setProfileVersionId(report.profile_version_id ?? localProfileVersionId);
+              if (report.match_result_id) setMatchResultId(report.match_result_id);
+              if (report.path_recommendation_id) setPathRecommendationId(report.path_recommendation_id);
+              break;
+            }
+          }
+
+          await markStepComplete(runId, step);
+          setPipelineCompletedSteps((prev) => new Set(prev).add(step));
         }
-        await markStepComplete(runId, currentStep);
-        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
 
-        // Step 4: matched
-        currentStep = "matched";
-        setPipelineCurrent(currentStep);
-        await markStepRunning(runId, currentStep);
-        const matching = await getMatching(sid, jCode, profileVersionId, runId);
-        matchResultId = matching.match_result_id ?? null;
-        if (matchResultId) {
-          await updateAnalysisContext(runId, { match_result_id: matchResultId });
-        }
-        setMatchResultId(matchResultId);
-        await markStepComplete(runId, currentStep);
-        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
-
-        // Step 5: pathed (career path planning)
-        currentStep = "pathed";
-        setPipelineCurrent(currentStep);
-        await markStepRunning(runId, currentStep);
-        const pathPlan = await getPathPlan(sid, jCode);
-        const pId = (pathPlan as Record<string, unknown>).path_id ?? (pathPlan as Record<string, unknown>).id ?? null;
-        if (pId && typeof pId === "number") {
-          await updateAnalysisContext(runId, { path_recommendation_id: pId });
-          setPathRecommendationId(pId);
-        }
-        await markStepComplete(runId, currentStep);
-        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
-
-        // Step 6: reported
-        currentStep = "reported";
-        setPipelineCurrent(currentStep);
-        await markStepRunning(runId, currentStep);
-        const report = await generateReport(sid, jCode, {
-          analysis_run_id: runId,
-          profile_version_id: profileVersionId,
-          match_result_id: matchResultId,
-        });
-        await updateAnalysisContext(runId, {
-          report_id: report.report_id,
-          profile_version_id: report.profile_version_id ?? profileVersionId,
-          match_result_id: report.match_result_id ?? matchResultId,
-          path_recommendation_id: report.path_recommendation_id ?? (typeof pId === "number" ? pId : null),
-        });
-        await markStepComplete(runId, currentStep);
-        setPipelineCompletedSteps((prev) => new Set(prev).add(currentStep));
         await markAnalysisComplete(runId);
-        setReportId(report.report_id);
-        setProfileVersionId(report.profile_version_id ?? profileVersionId);
-        if (report.match_result_id) setMatchResultId(report.match_result_id);
-        if (report.path_recommendation_id) setPathRecommendationId(report.path_recommendation_id);
-
         setPipelineDone(true);
       } catch (err: unknown) {
         // Use locally tracked step to avoid stale closure
@@ -413,7 +427,7 @@ export default function StudentMainPage() {
         setPipelineRunning(false);
       }
     },
-    []
+    [profileVersionId, matchResultId],
   );
 
   const retryPipeline = useCallback(() => {
@@ -628,7 +642,7 @@ export default function StudentMainPage() {
   };
 
   const renderPipeline = () => {
-    if (!pipelineCurrent && !pipelineDone && !pipelineError) return null;
+    if (!pipelineCurrent && !pipelineDone && !pipelineError && !incompleteRunData) return null;
 
     const steps = buildSteps(
       pipelineDone ? "reported" : pipelineCurrent,
@@ -648,12 +662,18 @@ export default function StudentMainPage() {
   };
 
   const renderPipelineResult = () => {
-    if (!pipelineDone) return null;
+    if (!pipelineDone && !incompleteRunData) return null;
     return (
       <div className="student-main__result-area">
-        <p className="student-main__result-title">
-          🎉 分析完成！以下是你的能力档案和职业规划结果：
-        </p>
+        {incompleteRunData ? (
+          <p className="student-main__result-title" style={{ color: "#b45309" }}>
+            ⚠️ 该次分析数据不完整（未生成报告），建议重新分析
+          </p>
+        ) : (
+          <p className="student-main__result-title">
+            🎉 分析完成！以下是你的能力档案和职业规划结果：
+          </p>
+        )}
         <div className="student-main__result-actions">
           <Link href={profileVersionId ? `/student/profile?version_id=${profileVersionId}` : "/student/profile"} className="btn-primary student-main__result-btn">
             查看能力画像
@@ -667,15 +687,26 @@ export default function StudentMainPage() {
           <Link href={pathRecommendationId ? `/student/path?path_id=${pathRecommendationId}` : "/student/path"} className="btn-primary student-main__result-btn student-main__result-btn--teal">
             查看职业路径
           </Link>
-          {reportId && (
+          {reportId ? (
             <Link href={`/results/${reportId}`} className="btn-primary student-main__result-btn student-main__result-btn--green">
               查看完整报告
             </Link>
+          ) : (
+            <span className="btn-primary student-main__result-btn student-main__result-btn--green" style={{ opacity: 0.5, cursor: "not-allowed" }}>
+              报告未生成
+            </span>
           )}
         </div>
-        <p className="student-main__result-hint">
-          💡 所有结果也会保存在<a href="/student/history">历史记录</a>中，随时可以查看
-        </p>
+        {incompleteRunData && (
+          <p className="student-main__result-hint" style={{ color: "#92400e" }}>
+            💡 可点击 <strong>&quot;开启新话题&quot;</strong> 按钮重新上传简历进行分析
+          </p>
+        )}
+        {!incompleteRunData && (
+          <p className="student-main__result-hint">
+            💡 所有结果也会保存在<a href="/student/history">历史记录</a>中，随时可以查看
+          </p>
+        )}
       </div>
     );
   };
@@ -850,6 +881,7 @@ export default function StudentMainPage() {
                 setMatchResultId(null);
                 setProfileVersionId(null);
                 setPathRecommendationId(null);
+                setIncompleteRunData(false);
                 setUploadError("");
                 setUploadSuccess("");
                 clearFiles().catch(() => {});
