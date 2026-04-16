@@ -13,6 +13,7 @@
 - Student resource authorization: `ensure_student_owns_resource(user, db, student_id)` in deps.py checks Student.user_id matches current user for student role; admin/teacher bypass
 - NOT NULL constraints: TeacherComment.report_id, Resume.student_id — always provide valid values in test fixtures
 - CORS safety: global exception handler in main.py explicitly adds CORS headers to 500 responses as a belt-and-suspenders approach; endpoints that call LLM or complex DB queries must wrap all failure-prone operations in try/except
+- Trailing slash rule: api_router uses `redirect_slashes=False`; all frontend calls to routes defined as `@router.get("/")` MUST include trailing slash (e.g., `/files/` not `/files`). Sub-paths like `/files/upload` are unaffected.
 
 ## 2026-04-17 01:00 - US-001
 - Implemented role route guard matrix with visible notice on cross-role redirect
@@ -126,4 +127,51 @@
   - FastAPI 的 `@app.exception_handler(Exception)` 处理器返回的 `JSONResponse` 虽然理论上会经过 CORSMiddleware，但在某些 Starlette 版本中可能不会正确添加 CORS 头。最佳实践是在异常处理器中**显式添加 CORS 头**作为安全保障
   - `greeting` 端点调用 LLM 时可能在 `_build_user_context` 阶段就因数据库查询失败而抛异常，必须将所有可能失败的操作（包括 DB 查询）都包裹在 try/except 中
   - `redirect_slashes=False` 已在 main.py 中设置，消除了 `/files` → `/files/` 重定向导致 CORS 头丢失的风险
+---
+
+## 2026-04-17 05:28 - US-007
+- 添加了持久化的"上传成功"状态指示器：上传简历后，上传卡片变为绿色已完成状态（显示 ✓ 和文件名），而非仅 3 秒后消失的 toast
+- 上传成功消息延长到 5 秒，并提示"请选择目标岗位开始分析"而非仅"上传成功"
+- JobSelector 新增 `onCancel` 回调、"返回上传"按钮和取消选择功能（点击已选中的岗位卡片可取消选择）
+- 添加 `jobSelectorDismissed` 状态管理：点击"返回上传"隐藏岗位选择器，显示"选择目标岗位"按钮可重新打开
+- 防止假成功状态：当 `needsJobSelect` 为 true 时，上传卡片显示为已完成状态，不再接收拖拽或点击上传，避免用户误操作
+- TypeScript 类型检查通过，后端单元测试无回归（排除预先存在的失败）
+- Changed files: `frontend/components/JobSelector.tsx`, `frontend/app/student/page.tsx`, `frontend/app/globals.css`
+- **未来迭代的学习：**
+  - JobSelector 组件使用 `style jsx`（CSS-in-JS），新增样式需要放在同一个 `<style jsx>` 块内，否则不会生效
+  - 上传卡片的 `disabled` 状态需要同时控制 `onClick`、`onDragOver`、`onDrop` 三个事件处理器才能完全阻止交互
+  - `needsJobSelect` 条件包含 `!jobSelectorDismissed`，dismissed 状态会在新文件上传时自动重置为 false
+  - 可用图标列表包括 "check-circle"、"upload" 等，但不含 "warning"（使用 "alert-circle" 替代）
+  - 此 story 仅实现前端 UI 变更，不涉及后端 API 修改
+---
+
+## 2026-04-17 22:30 - US-007 (retry 2)
+- 修复了前端 `listFiles()` 调用路径从 `/files` 改为 `/files/`，解决 redirect_slashes=False 导致的 404
+- 根因：US-006 中将 api_router 的 redirect_slashes 设为 False 以防止 CORS 重定向问题，但前端 listFiles 使用无尾斜杠路径
+- TypeScript 类型检查通过，13 个后端单元测试通过，无回归
+- Changed files: `frontend/lib/api.ts`
+- **未来迭代的学习：**
+  - 当 `redirect_slashes=False` 时，所有带尾斜杠的后端路由（`@router.get("/")`）在前端调用时必须包含尾斜杠
+  - 其他 `/files/` 子路径（如 `/files/upload`、`/files/{id}`、`/files/clear`）不受影响，因为它们不是根路径
+  - 如果新增路由使用 `@router.get("/")` 模式，前端调用必须加尾斜杠；或者考虑在后端同时注册 `@router.get("")` 和 `@router.get("/")` 作为兼容方案
+  - 已将此 pattern 添加到 Codebase Patterns
+---
+
+## 2026-04-17 06:22 - US-008
+- 将前端分析管道从 5 步扩展为 6 步，新增 "pathed"（已规划路径）步骤，与后端 VALID_STEPS 对齐
+- 在 `runPipeline` 中添加了 pathed 步骤的执行逻辑：调用 `getPathPlan` 生成职业路径，将 path_recommendation_id 保存到后端运行上下文
+- 添加了 `matchResultId`、`profileVersionId`、`pathRecommendationId` 三个状态变量，在管道运行和完成时存储
+- 实现了页面刷新状态恢复：挂载时调用 `getLatestAnalysis()` 获取最新运行状态，根据 status（completed/failed/running）恢复对应的管道状态、已完成的步骤、以及所有运行上下文 ID
+- 更新了结果入口链接：每个结果按钮现在携带 run-specific ID（`?match_id=`、`?path_id=`、`?version_id=`），确保打开的是当前运行的数据而非旧的运行数据
+- 更新了 matching 页面：新增 `?match_id={id}` 参数支持，通过 `getMatchResult(matchId)` 加载指定匹配结果，不触发 "历史数据" 标签
+- 更新了 path 页面：新增 `?path_id={id}` 参数支持，通过 `getPathResult(pathId)` 加载指定路径结果
+- "开启新话题" 按钮正确重置所有新增状态变量
+- TypeScript 类型检查通过，无回归
+- Changed files: `frontend/app/student/page.tsx`, `frontend/app/student/matching/page.tsx`, `frontend/app/student/path/page.tsx`
+- **未来迭代的学习：**
+  - 后端 VALID_STEPS 有 6 步（uploaded→parsed→profiled→matched→pathed→reported），前端 `PIPELINE_STEP_KEYS` 必须保持同步
+  - `getLatestAnalysis()` API 返回完整的 `AnalysisRunState`，包含所有关联 ID（report_id, match_result_id, profile_version_id, path_recommendation_id），可用于状态恢复
+  - matching 和 path 页面原本通过 POST 调用触发新分析，现在优先检查 `?match_id=` / `?path_id=` 参数直接加载已有结果
+  - `?history=match-{id}` 和 `?match_id={id}` 的区别：前者标记为 "历史数据"（isHistoricalView=true），后者不标记，用于当前运行的结果查看
+  - 需要手动浏览器验证：完整分析流程 + 页面刷新后状态恢复 + 结果入口链接导航
 ---
