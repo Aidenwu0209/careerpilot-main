@@ -206,3 +206,41 @@
   - `AnalysisRunState.uploaded_file_ids` 包含运行关联的文件 ID 列表，可用于重试时传递给后端
   - 需要手动浏览器验证：完整失败路径 + 重试流程 + 页面刷新后重试
 ---
+
+## 2026-04-17 23:50 - US-010
+- 验证了 `GET /students/me/history` 端点已正确按 `current_user.id` / `student.id` 作用域查询所有 7 种记录类型
+- 创建了 `test_history_list_scoping.py` 包含 14 个测试：
+  - 4 个所有权隔离测试（upload, report, chat, feedback 各一个）
+  - 3 个记录类型测试（全部 7 种类型、类型过滤、无效类型）
+  - 2 个跨学生隔离测试（不同学生不同列表、无 ref_id 泄漏）
+  - 2 个未认证访问测试（history 和 rename 均返回 401）
+  - 3 个 profile/path/matching 专属作用域测试
+- 所有 14 个测试通过，TypeScript 类型检查通过
+- Changed files: `backend/tests/unit/test_history_list_scoping.py`
+- **未来迭代的学习：**
+  - History 端点的 7 种记录类型查询已经通过 `current_user.id` 或 `student.id` 正确作用域化，无需修改后端逻辑
+  - MatchResult 需要先创建 StudentProfile 作为中间表才能生成，StudentProfile 对 student_id 有 unique 约束
+  - 创建测试数据时 JobProfile 的 `job_code` 需要唯一，每个测试用例应使用不同的 code
+  - HistoryTitle 的 rename 端点也是按 `user_id` 作用域的，安全性已确认
+---
+
+## 2026-04-17 08:58 - US-011
+- 验证了 `GET /students/me/history/detail` 端点已支持 6 种记录类型（upload, profile, matching, path, report, feedback）的正确详情查询和所有权校验
+- 验证了 `GET /chat/history/{message_id}` 端点的聊天历史回放功能，包含 ±5 分钟窗口消息和所有权校验
+- 已有 21 个测试全部通过，覆盖：
+  - Report detail: 正确返回、跨学生禁止、刷新一致性（3 个）
+  - Chat history: 消息对返回、跨学生禁止（403）、不存在消息（404）、未认证（401）、刷新一致性（5 个）
+  - Profile detail: 正确返回、跨学生禁止（2 个）
+  - Matching detail: 正确返回、跨学生禁止（2 个）
+  - Path detail: 正确返回、跨学生禁止（2 个）
+  - Upload detail: 正确返回、跨学生禁止（2 个）
+  - Feedback detail: 正确返回、跨学生禁止（2 个）
+  - 边界情况: 不支持的类型（400）、未认证（401）、不存在记录（404）（3 个）
+- TypeScript 类型检查通过
+- Changed files: `backend/app/api/routers/students.py`, `backend/app/api/routers/chat.py`, `backend/tests/unit/test_history_detail_query.py`
+- **未来迭代的学习：**
+  - History detail 端点通过 `ref_id` 直接定位记录，每次查询返回确定性的数据，不会回退到最新运行
+  - Chat 历史使用 `raise_resource_forbidden()` 返回 403（而非 404），与其它记录类型的 404 行为不同——这是有意设计，chat 消息 ID 不像其它记录 ID 那么容易猜测
+  - Matching 记录的所有权通过 `StudentProfile.student_id` 间接验证（MatchResult → StudentProfile → Student），需要 JOIN 查询
+  - 所有 6 种记录类型都有跨学生禁止测试（cross_student_forbidden），确保所有权隔离
+---
