@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.errors import require_role, raise_resource_forbidden
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
@@ -767,6 +767,8 @@ def create_comment(
     comment_text: str,
     priority: str = "normal",
     visible_to_student: bool = True,
+    follow_up_status: str | None = None,
+    next_follow_up_date: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
@@ -783,6 +785,15 @@ def create_comment(
     if priority not in valid_priorities:
         raise HTTPException(status_code=400, detail=f"优先级无效，允许值：{', '.join(valid_priorities)}")
 
+    valid_followup_statuses = ["pending", "in_progress", "completed", "overdue", "read", "communicated", "review"]
+    if follow_up_status and follow_up_status not in valid_followup_statuses:
+        raise HTTPException(status_code=400, detail=f"跟进状态无效，允许值：{', '.join(valid_followup_statuses)}")
+
+    parsed_date = None
+    if next_follow_up_date:
+        from datetime import datetime as dt
+        parsed_date = dt.fromisoformat(next_follow_up_date)
+
     comment = TeacherComment(
         teacher_id=current_user.id,
         student_id=report.student_id,
@@ -791,6 +802,8 @@ def create_comment(
         comment=comment_text,
         priority=priority,
         visible_to_student=visible_to_student,
+        follow_up_status=follow_up_status,
+        next_follow_up_date=parsed_date,
     )
     db.add(comment)
     db.commit()
@@ -804,6 +817,8 @@ def create_comment(
         "comment": comment.comment,
         "priority": comment.priority,
         "visible_to_student": comment.visible_to_student,
+        "follow_up_status": comment.follow_up_status,
+        "next_follow_up_date": comment.next_follow_up_date.isoformat() if comment.next_follow_up_date else None,
         "created_at": comment.created_at.isoformat() if comment.created_at else None,
     })
 
@@ -842,6 +857,8 @@ def list_comments(
             "priority": c.priority,
             "visible_to_student": c.visible_to_student,
             "student_read_at": c.student_read_at.isoformat() if c.student_read_at else None,
+            "follow_up_status": c.follow_up_status,
+            "next_follow_up_date": c.next_follow_up_date.isoformat() if c.next_follow_up_date else None,
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "updated_at": c.updated_at.isoformat() if c.updated_at else None,
         })
@@ -855,6 +872,8 @@ def update_comment(
     comment_text: str | None = None,
     priority: str | None = None,
     visible_to_student: bool | None = None,
+    follow_up_status: str | None = None,
+    next_follow_up_date: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
@@ -879,6 +898,14 @@ def update_comment(
         comment.priority = priority
     if visible_to_student is not None:
         comment.visible_to_student = visible_to_student
+    if follow_up_status is not None:
+        valid_followup_statuses = ["pending", "in_progress", "completed", "overdue", "read", "communicated", "review"]
+        if follow_up_status not in valid_followup_statuses:
+            raise HTTPException(status_code=400, detail=f"跟进状态无效，允许值：{', '.join(valid_followup_statuses)}")
+        comment.follow_up_status = follow_up_status
+    if next_follow_up_date is not None:
+        from datetime import datetime as dt
+        comment.next_follow_up_date = dt.fromisoformat(next_follow_up_date)
 
     db.commit()
     db.refresh(comment)
@@ -888,6 +915,8 @@ def update_comment(
         "comment": comment.comment,
         "priority": comment.priority,
         "visible_to_student": comment.visible_to_student,
+        "follow_up_status": comment.follow_up_status,
+        "next_follow_up_date": comment.next_follow_up_date.isoformat() if comment.next_follow_up_date else None,
         "updated_at": comment.updated_at.isoformat() if comment.updated_at else None,
     })
 
@@ -914,3 +943,167 @@ def delete_comment(
     db.commit()
 
     return APIResponse(data={"deleted": True, "id": comment_id})
+
+
+# --- Roster Management ---
+
+@router.get("/roster/search", response_model=APIResponse)
+def search_roster_candidates(
+    keyword: str = Query(..., min_length=1, description="搜索关键词"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """Search candidate students by username, email, major, or grade."""
+    require_role(current_user.role, "teacher", "admin")
+
+    teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
+    if not teacher:
+        teacher = Teacher(user_id=current_user.id, department="", title="")
+        db.add(teacher)
+        db.flush()
+
+    # Build search condition across User (username, email) and Student (major, grade)
+    kw = f"%{keyword}%"
+    user_ids_matching = db.scalars(
+        select(User.id).where(
+            (User.username.ilike(kw)) | (User.email.ilike(kw)) | (User.full_name.ilike(kw))
+        )
+    ).all()
+
+    query = (
+        select(Student)
+        .where(
+            Student.user_id.in_(user_ids_matching)
+            | Student.major.ilike(kw)
+            | Student.grade.ilike(kw)
+        )
+        .order_by(Student.id)
+    )
+    students = db.scalars(query).all()
+
+    # Get already-bound student IDs for this teacher
+    already_bound_ids = set(
+        db.scalars(
+            select(TeacherStudentLink.student_id).where(
+                TeacherStudentLink.teacher_id == teacher.id,
+                TeacherStudentLink.status == "active",
+            )
+        ).all()
+    )
+
+    items = []
+    for stu in students:
+        user = db.scalar(select(User).where(User.id == stu.user_id))
+        items.append({
+            "student_id": stu.id,
+            "user_id": stu.user_id,
+            "username": user.username if user else "",
+            "full_name": user.full_name if user else "",
+            "email": user.email if user else "",
+            "major": stu.major,
+            "grade": stu.grade,
+            "already_bound": stu.id in already_bound_ids,
+        })
+
+    return APIResponse(data=items)
+
+
+@router.post("/roster/{student_id}", response_model=APIResponse)
+def add_student_to_roster(
+    student_id: int,
+    group_name: str = Query("", description="分组名称"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """Bind an eligible student to the current teacher's class."""
+    require_role(current_user.role, "teacher", "admin")
+
+    student = db.scalar(select(Student).where(Student.id == student_id))
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
+    if not teacher:
+        teacher = Teacher(user_id=current_user.id, department="", title="")
+        db.add(teacher)
+        db.flush()
+
+    # Check if already bound to this teacher
+    existing = db.scalar(
+        select(TeacherStudentLink).where(
+            TeacherStudentLink.teacher_id == teacher.id,
+            TeacherStudentLink.student_id == student_id,
+            TeacherStudentLink.status == "active",
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="该学生已在您的班级中")
+
+    # Check if student is bound to another teacher (reject cross-teacher binding)
+    other_teacher_link = db.scalar(
+        select(TeacherStudentLink).where(
+            TeacherStudentLink.student_id == student_id,
+            TeacherStudentLink.status == "active",
+            TeacherStudentLink.teacher_id != teacher.id,
+        )
+    )
+    if other_teacher_link:
+        other_teacher = db.scalar(select(Teacher).where(Teacher.id == other_teacher_link.teacher_id))
+        other_user = db.scalar(select(User).where(User.id == other_teacher.user_id)) if other_teacher else None
+        teacher_name = other_user.full_name if other_user else "未知教师"
+        raise HTTPException(
+            status_code=403,
+            detail=f"该学生已被 {teacher_name} 绑定，无法重复绑定",
+        )
+
+    link = TeacherStudentLink(
+        teacher_id=teacher.id,
+        student_id=student_id,
+        group_name=group_name,
+        is_primary=True,
+        source="manual",
+        status="active",
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+
+    return APIResponse(data={
+        "id": link.id,
+        "teacher_id": teacher.id,
+        "student_id": student_id,
+        "group_name": link.group_name,
+        "source": link.source,
+        "status": link.status,
+        "created_at": link.created_at.isoformat() if link.created_at else None,
+    })
+
+
+@router.delete("/roster/{student_id}", response_model=APIResponse)
+def remove_student_from_roster(
+    student_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """Remove a student from the current teacher's class."""
+    require_role(current_user.role, "teacher", "admin")
+
+    teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
+    if not teacher:
+        raise HTTPException(status_code=404, detail="教师记录不存在")
+
+    link = db.scalar(
+        select(TeacherStudentLink).where(
+            TeacherStudentLink.teacher_id == teacher.id,
+            TeacherStudentLink.student_id == student_id,
+            TeacherStudentLink.status == "active",
+        )
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="该学生不在您的班级中")
+
+    link.status = "inactive"
+    db.commit()
+    db.refresh(link)
+
+    return APIResponse(data={"removed": True, "student_id": student_id})
