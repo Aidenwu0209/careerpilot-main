@@ -407,3 +407,24 @@
   - 教师花名册管理的 Teacher 记录可能不存在（新注册教师），需要自动创建
   - `already_bound` 字段帮助前端区分"可添加"和"已在我的班级中"
 ---
+
+## 2026-04-17 14:15 - US-020
+- 创建了教师花名册管理页面 `/teacher/roster/page.tsx`
+  - 绑定学生列表：复用 `getTeacherStudentReports()` API 加载已绑定学生，显示姓名、用户名、邮箱、专业、年级
+  - 搜索功能：支持按用户名、邮箱、专业、年级搜索候选学生，显示已绑定/可添加状态
+  - 添加学生：可输入可选分组名，调用 `POST /teacher/roster/{student_id}` 绑定
+  - 移除学生：带确认对话框，调用 `DELETE /teacher/roster/{student_id}` 软删除
+  - 错误/成功提示：红色/绿色 banner 显示后端返回的错误消息
+- 在 `api.ts` 中添加了 3 个花名册 API 函数和 3 个类型定义：`searchRosterCandidates`, `addStudentToRoster`, `removeStudentFromRoster`
+- 在所有 6 个教师页面的 `teacherNavItems` 中添加了花名册管理导航项
+- 添加了花名册专用 CSS 样式（error/success banner, search bar, badge, confirm remove, 响应式）
+- TypeScript 类型检查通过（0 错误），21 个花名册后端测试通过
+- 浏览器测试通过：教师登录 → 花名册页面显示 36 个绑定学生 → 搜索"人工"返回 5 个匹配 → 移除确认/取消正常 → 无控制台错误
+- Changed files: `frontend/app/teacher/roster/page.tsx` (新建), `frontend/lib/api.ts`, `frontend/app/globals.css`, `frontend/app/teacher/page.tsx`, `frontend/app/teacher/info/page.tsx`, `frontend/app/teacher/reports/page.tsx`, `frontend/app/teacher/overview/page.tsx`, `frontend/app/teacher/advice/page.tsx`
+- **未来迭代的学习：**
+  - 绑定学生列表复用 `getTeacherStudentReports()` 而非新增专用端点，因为这个 API 已返回所有绑定学生数据
+  - 后端搜索 API `min_length=1` 限制意味着不能用空格或通配符搜索，前端加载绑定学生必须用其他已有 API
+  - `TeacherStudentLink` 的 soft-delete 模式意味着移除后刷新页面仍能从搜索结果中看到该学生（`already_bound=false`），可重新添加
+  - Playwright `fill()` 方法不能正确触发 React 受控输入框的 `onChange`，需要用 `pressSequentially()` 或通过 React fiber 直接调用 handler
+  - `teacherNavItems` 数组在 6 个文件中重复定义，新增导航项需要同步修改所有文件（或重构为共享模块）
+---
