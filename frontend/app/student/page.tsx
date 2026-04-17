@@ -134,7 +134,7 @@ export default function StudentMainPage() {
   const historyId = searchParams.get("history");
   const isHistoricalChatView = !!(historyId && historyId.startsWith("chat-"));
   const [query, setQuery] = useState("");
-  const [showGuide, setShowGuide] = useState(false);
+  const [showGuide, setShowGuide] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -851,31 +851,59 @@ export default function StudentMainPage() {
       onDragLeave={handlePageDragLeave}
       onDrop={handlePageDrop}
     >
-      {showGuide && (
-        <div style={{ maxWidth: 720, margin: "16px auto", padding: "20px 24px", background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.06)" }}>
-          <h3 style={{ fontSize: "1rem", margin: "0 0 12px" }}>两步使用指南</h3>
-          <p style={{ fontSize: "0.9375rem", color: "var(--subtle)", margin: "0 0 8px" }}>1. 上传简历或直接输入你想了解的职业方向</p>
-          <p style={{ fontSize: "0.9375rem", color: "var(--subtle)", margin: "0 0 8px" }}>2. AI 为你分析职业方向、岗位匹配和发展路径</p>
-          <button
-            onClick={() => setShowGuide(false)}
-            style={{ marginTop: 8, fontSize: "0.8125rem", background: "none", border: "1px solid #ddd", color: "var(--subtle)", cursor: "pointer", padding: "4px 12px", borderRadius: 6, minHeight: 28 }}
-          >
-            关闭
-          </button>
+      {/* Onboarding flow guide */}
+      <div className="student-onboarding-guide">
+        <div className="student-onboarding-guide__inner">
+          <div className="student-onboarding-guide__header">
+            <span className="student-onboarding-guide__badge">使用指南</span>
+            <button
+              className="student-onboarding-guide__toggle"
+              onClick={() => setShowGuide(!showGuide)}
+            >
+              {showGuide ? "收起" : "展开"}
+            </button>
+          </div>
+          {showGuide && (
+            <div className="student-onboarding-guide__steps">
+              <div className="student-onboarding-guide__step">
+                <span className="student-onboarding-guide__step-num">1</span>
+                <div className="student-onboarding-guide__step-body">
+                  <strong>上传简历</strong>
+                  <span>点击下方上传区域或将文件拖拽进来，支持 PDF / Word / 图片格式</span>
+                </div>
+              </div>
+              <div className="student-onboarding-guide__step">
+                <span className="student-onboarding-guide__step-num">2</span>
+                <div className="student-onboarding-guide__step-body">
+                  <strong>选择目标岗位</strong>
+                  <span>上传成功后选择你想分析的目标岗位方向</span>
+                </div>
+              </div>
+              <div className="student-onboarding-guide__step">
+                <span className="student-onboarding-guide__step-num">3</span>
+                <div className="student-onboarding-guide__step-body">
+                  <strong>等待分析完成</strong>
+                  <span>系统自动完成 OCR 解析、能力画像、岗位匹配、路径规划和报告生成</span>
+                </div>
+              </div>
+              <div className="student-onboarding-guide__step">
+                <span className="student-onboarding-guide__step-num">4</span>
+                <div className="student-onboarding-guide__step-body">
+                  <strong>查看结果</strong>
+                  <span>分析完成后可查看能力画像、匹配分析、职业路径和完整报告</span>
+                </div>
+              </div>
+              <div className="student-onboarding-guide__step">
+                <span className="student-onboarding-guide__step-num">5</span>
+                <div className="student-onboarding-guide__step-body">
+                  <strong>回顾历史</strong>
+                  <span>所有分析记录保存在历史记录中，可随时通过侧边栏进入查看</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {!showGuide && (
-        <div style={{ textAlign: "center", padding: "4px 24px" }}>
-          <button
-            className="guide-btn"
-            onClick={() => setShowGuide(!showGuide)}
-            style={{ fontSize: "0.8125rem", background: "none", border: "1px solid #ddd", color: "var(--subtle)", cursor: "pointer", padding: "4px 12px", borderRadius: 6, minHeight: 28 }}
-          >
-            使用指南
-          </button>
-        </div>
-      )}
+      </div>
 
       {renderPipeline()}
       {renderPipelineResult()}
