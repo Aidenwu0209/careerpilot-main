@@ -466,3 +466,47 @@
   - admin 页面布局代码在每个文件中重复（SidebarDrawer + topbar + handleLogout + adminNavItems），已有 `RoleShell` 组件可复用但未采用——后续可考虑重构
   - Playwright 的 `getByRole('button', { name: '查看' }).first()` 可以正确定位表格中的第一个"查看"按钮
 ---
+
+## 2026-04-17 15:56 - US-023
+- 实现了管理员职位画像（JobProfile）CRUD 后端端点：
+  - `GET /admin/positions` — 列表查询，支持按 job_code/title 关键词搜索 + 分页
+  - `POST /admin/positions` — 创建职位画像，job_code 和 title 必填，手动检查唯一性
+  - `GET /admin/positions/{id}` — 获取单个职位画像详情
+  - `PUT /admin/positions/{id}` — 更新职位画像字段，排除自身后检查 job_code 唯一性
+  - `DELETE /admin/positions/{id}` — 删除职位画像，级联清理 CertificateRequired 记录，有关联 MatchResult 时阻止删除
+- 添加了 `_serialize_position` 辅助函数统一序列化 JobProfile
+- 添加了 `JobProfileCreate` 和 `JobProfileUpdate` Pydantic schema（job.py）
+- 创建了 `test_admin_position_management.py` 包含 21 个测试：
+  - 5 个搜索测试（全部、按 job_code、按 title、空关键词、无匹配）
+  - 5 个创建测试（最小、完整字段、缺 job_code、缺 title、重复 job_code）
+  - 4 个更新测试（改 title、改多字段、不存在、重复 job_code）
+  - 3 个删除测试（成功、不存在、级联删除证书记录）
+  - 4 个授权测试（未认证 401、student 403、teacher 403、admin 200）
+- 所有 21 个测试通过
+- Changed files: `backend/app/api/routers/admin.py`, `backend/app/schemas/job.py`, `backend/tests/unit/test_admin_position_management.py`
+- **未来迭代的学习：**
+  - `JobProfile.job_code` 字段有索引但无唯一约束，重复检测必须在应用层手动实现（不能依赖 IntegrityError）
+  - 删除 JobProfile 时需检查 MatchResult 外键引用（`MatchResult.job_profile_id`），有引用时返回 400 而非级联删除
+  - CertificateRequired 通过 `job_profile_id` FK 关联 JobProfile，删除时应手动清理
+  - admin.py 的 CRUD 端点使用 `body: dict` 而非 Pydantic model，灵活性高但缺少自动校验
+  - TypeScript typecheck 因 node_modules 解释器权限问题无法在当前环境运行，与代码变更无关
+---
+
+## 2026-04-17 16:22 - US-024
+- 重写了 admin jobs 页面（`/admin/jobs/page.tsx`），添加完整的岗位画像 CRUD UI
+- 搜索功能：支持按 job_code 和 title 关键词搜索，带清除筛选按钮
+- 新增岗位：弹出表单（岗位编码*、岗位名称*、岗位概述、技能要求、证书要求），提交后列表立即更新
+- 编辑岗位：点击编辑按钮打开预填充表单，修改后保存立即更新列表
+- 删除岗位：带确认对话框，删除后从列表移除并显示成功提示，有关联匹配结果时后端拒绝删除并显示错误
+- 分页：每页 20 条
+- 在 `api.ts` 中添加了 6 个 Admin Position API 函数和 2 个类型定义：`AdminPosition`, `AdminPositionInput`, `getAdminPositions`, `getAdminPosition`, `createAdminPosition`, `updateAdminPosition`, `deleteAdminPosition`
+- TypeScript 类型检查通过（0 错误），49 个后端单元测试通过（1 个预先存在的失败与本次无关）
+- 浏览器测试通过：列表加载 8 条 → 新增 J-TEST-001 → 编辑改名为"测试岗位-已编辑" → 搜索"AI"返回 1 条 → 清除筛选 → 删除测试岗位 → 恢复 8 条，全程无控制台错误
+- Changed files: `frontend/app/admin/jobs/page.tsx`, `frontend/lib/api.ts`
+- **未来迭代的学习：**
+  - Admin jobs 页面 (`/admin/jobs`) 已从只读列表升级为完整 CRUD 页面，与 admin users 页面保持一致的 UI 模式（搜索栏 + 表单 + 列表 + 分页）
+  - `AdminPositionInput` 中的 `skill_requirements` 和 `certificate_requirements` 是 string[] 类型，前端用中文顿号分隔输入，提交时自动 split 为数组
+  - 后端 position API (`/admin/positions`) 的 CRUD 与 users API 模式一致：列表返回 `{total, items}`，创建/更新返回序列化对象，删除返回 `{deleted: true, id}`
+  - `adminNavItems` 在 admin 子页面中重复定义（jobs, users, system, stats 共 4 处），新增导航项需要同步修改所有文件
+  - 岗位画像的 `capability_scores` 和 `dimension_weights` 是复杂 JSON 字段，当前 UI 未暴露编辑入口，仅传递空对象，后续可按需添加
+---
