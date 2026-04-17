@@ -1107,3 +1107,36 @@ def remove_student_from_roster(
     db.refresh(link)
 
     return APIResponse(data={"removed": True, "student_id": student_id})
+
+
+@router.post("/students/{student_user_id}/reset-password", response_model=APIResponse)
+def reset_student_password(
+    student_user_id: int,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """Teacher resets password for a bound student. Admin can also use this."""
+    require_role(current_user.role, "teacher", "admin")
+
+    new_password = payload.get("new_password", "")
+    if not new_password or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码至少6位")
+
+    # Look up student by user_id
+    student = db.scalar(select(Student).where(Student.user_id == student_user_id))
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    # Teacher can only reset for bound students; admin bypasses
+    _ensure_teacher_can_access_student(current_user, db, student.id)
+
+    user = db.scalar(select(User).where(User.id == student_user_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    from app.services.auth_service import hash_password
+    user.password_hash = hash_password(new_password)
+    db.commit()
+
+    return APIResponse(data={"message": "密码重置成功", "user_id": student_user_id})
