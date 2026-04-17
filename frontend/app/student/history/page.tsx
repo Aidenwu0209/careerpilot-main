@@ -66,11 +66,11 @@ function formatTime(iso: string): string {
 function getHistoryItemLink(item: HistoryItem): string {
   switch (item.type) {
     case "upload":
-      return "/student/upload";
+      return "/student";
     case "profile":
-      return `/student/profile?version=${item.ref_id}`;
+      return `/student/profile?version=${item.ref_id}&source=history`;
     case "report":
-      return `/results/${item.ref_id}`;
+      return `/results/${item.ref_id}?source=history`;
     case "matching":
       return `/student/matching?history=${item.id}`;
     case "path":

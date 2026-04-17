@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Markdown from "react-markdown";
 import {
   API_BASE,
@@ -34,7 +34,9 @@ function exportedUrl(fileName: string): string {
 
 export default function ResultPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const reportId = Number(params.id);
+  const isHistoricalView = searchParams.get("source") === "history";
   const [report, setReport] = useState<ReportDraft | null>(null);
   const [pathPlan, setPathPlan] = useState<PathPlan | null>(null);
   const [draft, setDraft] = useState("");
@@ -155,7 +157,14 @@ export default function ResultPage() {
       <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>完整报告</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>完整报告</h1>
+              {isHistoricalView ? (
+                <span style={{ padding: "2px 10px", borderRadius: 6, background: "rgba(180,83,9,0.1)", color: "#b45309", fontSize: "0.75rem", fontWeight: 600 }}>历史报告</span>
+              ) : (
+                <span style={{ padding: "2px 10px", borderRadius: 6, background: "rgba(34,197,94,0.1)", color: "#166534", fontSize: "0.75rem", fontWeight: 600 }}>当前最新</span>
+              )}
+            </div>
             <p style={{ margin: "6px 0 0", color: "var(--subtle)", fontSize: "0.875rem" }}>
               报告覆盖职业探索、目标路径、行动计划、编辑导出四个模块。
             </p>

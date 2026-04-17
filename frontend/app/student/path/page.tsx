@@ -87,13 +87,17 @@ export default function StudentPathPage() {
     <div style={{ maxWidth: 1120, margin: "0 auto", padding: "24px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>职业路径规划</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>职业路径规划</h1>
+            {isHistoricalView ? (
+              <span style={{ padding: "2px 10px", borderRadius: 6, background: "rgba(180,83,9,0.1)", color: "#b45309", fontSize: "0.75rem", fontWeight: 600 }}>历史数据</span>
+            ) : plan ? (
+              <span style={{ padding: "2px 10px", borderRadius: 6, background: "rgba(34,197,94,0.1)", color: "#166534", fontSize: "0.75rem", fontWeight: 600 }}>当前最新</span>
+            ) : null}
+          </div>
           <p style={{ margin: "6px 0 0", color: "var(--subtle)", fontSize: "0.875rem" }}>
             垂直晋升路径与相关岗位换岗路径图谱
           </p>
-          {isHistoricalView && (
-            <p style={{ fontSize: "0.875rem", color: "#b45309", margin: "4px 0 0" }}>正在查看历史数据</p>
-          )}
         </div>
         <Link href="/student" className="btn-secondary" style={{ textDecoration: "none", padding: "10px 14px", fontSize: "0.875rem" }}>
           返回问答页
