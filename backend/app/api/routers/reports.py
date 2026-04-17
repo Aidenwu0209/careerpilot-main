@@ -21,6 +21,58 @@ from app.services.bootstrap import ServiceContainer
 router = APIRouter()
 
 
+@router.get("/latest", response_model=ReportResponse)
+def get_latest_report(
+    current_user: User = Depends(get_current_user),
+    container: ServiceContainer = Depends(get_container),
+    db: Session = Depends(get_db_session),
+) -> ReportResponse:
+    """Return the most recent report for the authenticated student."""
+    require_role(current_user.role, "student", "admin", "teacher")
+
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="学生信息不存在")
+
+    report = db.scalar(
+        select(CareerReport)
+        .where(CareerReport.student_id == student.id)
+        .order_by(CareerReport.id.desc())
+        .limit(1)
+    )
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="暂无报告，请先完成分析")
+
+    if not report.content_json or not report.markdown_content:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告尚未生成")
+
+    # Check source files status
+    source_files_deleted = False
+    if report.profile_version_id:
+        from app.models import ProfileVersion
+        pv = db.scalar(select(ProfileVersion).where(ProfileVersion.id == report.profile_version_id))
+        if pv and pv.uploaded_file_ids:
+            existing_count = db.scalar(
+                select(func.count(UploadedFile.id)).where(UploadedFile.id.in_(pv.uploaded_file_ids))
+            )
+            if existing_count < len(pv.uploaded_file_ids):
+                source_files_deleted = True
+
+    return ReportResponse(
+        report_id=report.id,
+        student_id=report.student_id,
+        job_code=report.target_job_code,
+        content=report.content_json,
+        markdown_content=report.markdown_content,
+        status=report.status,
+        path_recommendation_id=report.path_recommendation_id,
+        profile_version_id=report.profile_version_id,
+        match_result_id=report.match_result_id,
+        analysis_run_id=report.analysis_run_id,
+        source_files_deleted=source_files_deleted,
+    )
+
+
 @router.get("/{report_id}", response_model=ReportResponse)
 def get_report(
     report_id: int,

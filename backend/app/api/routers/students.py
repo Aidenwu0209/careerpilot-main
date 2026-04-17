@@ -4,6 +4,8 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from app.core.errors import require_role, raise_resource_forbidden
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -244,8 +246,7 @@ def update_current_student(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ):
-    if current_user.role != "student":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有学生账号可以维护个人信息")
+    require_role(current_user.role, "student")
 
     student = db.scalar(select(Student).where(Student.user_id == current_user.id))
     if not student:
@@ -647,6 +648,113 @@ def rename_history_item(
     return {"ok": True}
 
 
+@router.get("/me/history/detail")
+def get_history_detail(
+    record_type: str = Query(..., alias="type"),
+    ref_id: int = Query(..., gt=0),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    """Return detail payload for a specific history record, scoped to the authenticated user.
+
+    Supported types: upload, profile, matching, path, report, feedback.
+    Chat is handled by the dedicated /chat/history/{message_id} endpoint.
+    """
+    student = db.scalar(select(Student).where(Student.user_id == current_user.id))
+    if not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="学生信息不存在")
+
+    if record_type == "upload":
+        f = db.get(UploadedFile, ref_id)
+        if not f or f.owner_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="文件不存在")
+        return {
+            "type": "upload",
+            "ref_id": f.id,
+            "file_name": f.file_name,
+            "file_type": f.file_type,
+            "created_at": f.created_at.isoformat() if f.created_at else "",
+            "meta": f.meta_json or {},
+        }
+
+    elif record_type == "profile":
+        pv = db.get(ProfileVersion, ref_id)
+        if not pv or pv.student_id != student.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="画像版本不存在")
+        return {
+            "type": "profile",
+            "ref_id": pv.id,
+            "version_no": pv.version_no,
+            "snapshot": pv.snapshot_json,
+            "uploaded_file_ids": pv.uploaded_file_ids or [],
+            "created_at": pv.created_at.isoformat() if pv.created_at else "",
+        }
+
+    elif record_type == "matching":
+        m = db.get(MatchResult, ref_id)
+        if not m:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="匹配记录不存在")
+        # Verify ownership: match result must belong to this student's profile
+        sp = db.scalar(select(StudentProfile).where(StudentProfile.id == m.student_profile_id))
+        if not sp or sp.student_id != student.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="匹配记录不存在")
+        return {
+            "type": "matching",
+            "ref_id": m.id,
+            "total_score": m.total_score,
+            "summary": m.summary or "",
+            "strengths": m.strengths_json or [],
+            "gap_items": m.gaps_json or [],
+            "suggestions": m.suggestions_json or [],
+            "created_at": m.created_at.isoformat() if m.created_at else "",
+        }
+
+    elif record_type == "path":
+        p = db.get(PathRecommendation, ref_id)
+        if not p or p.student_id != student.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="路径规划记录不存在")
+        return {
+            "type": "path",
+            "ref_id": p.id,
+            "target_job_code": p.target_job_code,
+            "primary_path": p.primary_path_json or [],
+            "alternate_paths": p.alternate_paths_json or [],
+            "gaps": p.gaps_json or [],
+            "recommendations": p.recommendations_json or [],
+            "created_at": p.created_at.isoformat() if p.created_at else "",
+        }
+
+    elif record_type == "report":
+        r = db.get(CareerReport, ref_id)
+        if not r or r.student_id != student.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告不存在")
+        return {
+            "type": "report",
+            "ref_id": r.id,
+            "job_code": r.target_job_code,
+            "status": r.status,
+            "content": r.content_json,
+            "markdown_content": r.markdown_content,
+            "created_at": r.created_at.isoformat() if r.created_at else "",
+        }
+
+    elif record_type == "feedback":
+        fb = db.get(FollowupRecord, ref_id)
+        if not fb or fb.student_id != student.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="反馈记录不存在")
+        return {
+            "type": "feedback",
+            "ref_id": fb.id,
+            "record_type": fb.record_type,
+            "content": fb.content,
+            "meta": fb.meta_json or {},
+            "created_at": fb.created_at.isoformat() if fb.created_at else "",
+        }
+
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"不支持的记录类型: {record_type}")
+
+
 # --- Teacher Feedback for Students ---
 
 @router.get("/me/teacher-feedback")
@@ -700,8 +808,7 @@ def mark_feedback_read(
 
     student = db.scalar(select(Student).where(Student.user_id == current_user.id))
     if not student or comment.student_id != student.id:
-        from fastapi import HTTPException, status
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+        raise_resource_forbidden()
 
     comment.student_read_at = datetime.now(timezone.utc)
     db.commit()

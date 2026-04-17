@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { SectionCard } from "@/components/SectionCard";
 import { EmptyState } from "@/components/EmptyState";
 import {
@@ -51,6 +52,8 @@ function CapabilityBar({ label, value }: { label: string; value: number }) {
 }
 
 export default function StudentProfilePage() {
+  const searchParams = useSearchParams();
+  const versionParam = searchParams.get("version");
   const [profile, setProfile] = useState<StudentProfileType | null>(null);
   const [versions, setVersions] = useState<ProfileVersionItem[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<ProfileVersionItem | null>(null);
@@ -74,6 +77,23 @@ export default function StudentProfilePage() {
       setFiles(f);
       setProfile(p);
       setVersions(v);
+
+      // Auto-select version from URL param
+      if (versionParam) {
+        const vId = parseInt(versionParam, 10);
+        if (!isNaN(vId)) {
+          const found = v.find((item: ProfileVersionItem) => item.id === vId);
+          if (found) {
+            setSelectedVersion(found);
+          } else if (sess.student_id) {
+            // Version not in list, try fetching directly
+            try {
+              const detail = await getProfileVersionDetail(sess.student_id, vId);
+              setSelectedVersion(detail as unknown as ProfileVersionItem);
+            } catch { /* ignore */ }
+          }
+        }
+      }
     } catch {} finally { setLoading(false); }
   }, []);
 

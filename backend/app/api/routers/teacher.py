@@ -1,6 +1,8 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from app.core.errors import require_role, raise_resource_forbidden
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -62,7 +64,7 @@ def _get_teacher_bound_student_ids(current_user: User, db: Session) -> list[int]
 def _ensure_teacher_can_access_student(current_user: User, db: Session, student_id: int) -> None:
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
     if bound_ids is not None and student_id not in bound_ids:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问该学生")
+        raise_resource_forbidden()
 
 
 def _teacher_info(current_user: User, db: Session) -> dict:
@@ -97,8 +99,7 @@ def get_teacher_info(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有教师账号可以维护个人信息")
+    require_role(current_user.role, "teacher")
     return APIResponse(data=_teacher_info(current_user, db))
 
 
@@ -108,8 +109,7 @@ def update_teacher_info(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "teacher":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有教师账号可以维护个人信息")
+    require_role(current_user.role, "teacher")
 
     teacher = db.scalar(select(Teacher).where(Teacher.user_id == current_user.id))
     if not teacher:
@@ -140,8 +140,7 @@ def get_student_reports(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
 
@@ -257,8 +256,7 @@ def match_distribution(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
 
@@ -288,8 +286,7 @@ def major_distribution(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
 
@@ -314,8 +311,7 @@ def get_teacher_advice(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
 
@@ -407,8 +403,7 @@ def overview_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
 
@@ -488,8 +483,7 @@ def get_student_report_list(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Teacher views a specific student's report list."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     student = db.scalar(select(Student).where(Student.id == student_id))
     if not student:
@@ -533,8 +527,7 @@ def get_report_detail(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Teacher views a single report detail with all sections."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
     if not report:
@@ -603,8 +596,7 @@ def class_overview(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Class overview statistics for teacher dashboard."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     bound_ids = _get_teacher_bound_student_ids(current_user, db)
 
@@ -704,8 +696,7 @@ def update_followup_status(
     teacher_notes: str | None = None,
 ) -> APIResponse:
     """Teacher updates followup status for a student."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     student = db.scalar(select(Student).where(Student.id == student_id))
     if not student:
@@ -780,8 +771,7 @@ def create_comment(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Teacher adds a comment to a student report."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
     if not report:
@@ -825,8 +815,7 @@ def list_comments(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """List all comments for a report."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
     if not report:
@@ -870,8 +859,7 @@ def update_comment(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Teacher updates their own comment."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     comment = db.scalar(select(TeacherComment).where(TeacherComment.id == comment_id))
     if not comment:
@@ -880,7 +868,7 @@ def update_comment(
     _ensure_teacher_can_access_student(current_user, db, comment.student_id)
 
     if comment.teacher_id != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只能修改自己的点评")
+        raise_resource_forbidden("只能修改自己的点评")
 
     if comment_text is not None:
         comment.comment = comment_text
@@ -911,8 +899,7 @@ def delete_comment(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Teacher deletes their own comment."""
-    if current_user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "teacher", "admin")
 
     comment = db.scalar(select(TeacherComment).where(TeacherComment.id == comment_id))
     if not comment:
@@ -921,7 +908,7 @@ def delete_comment(
     _ensure_teacher_can_access_student(current_user, db, comment.student_id)
 
     if comment.teacher_id != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只能删除自己的点评")
+        raise_resource_forbidden("只能删除自己的点评")
 
     db.delete(comment)
     db.commit()

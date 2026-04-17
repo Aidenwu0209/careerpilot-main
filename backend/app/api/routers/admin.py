@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.core.errors import require_role
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select, text
@@ -68,8 +70,7 @@ def list_users(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="只有管理员可以查看用户列表")
+    require_role(current_user.role, "admin")
 
     total = db.query(User).count()
     rows = db.scalars(select(User).order_by(User.id).offset(skip).limit(limit)).all()
@@ -88,8 +89,7 @@ def create_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
     if payload.role not in VALID_USER_ROLES:
         raise HTTPException(status_code=400, detail=f"无效角色，允许值：{', '.join(sorted(VALID_USER_ROLES))}")
     if db.scalar(select(User).where(User.username == payload.username)):
@@ -121,8 +121,7 @@ def get_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if not user:
@@ -138,8 +137,7 @@ def update_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if not user:
@@ -180,8 +178,7 @@ def delete_user(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if not user:
@@ -223,8 +220,7 @@ def toggle_user_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if not user:
@@ -248,8 +244,7 @@ def stats_overview(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     total_users = db.query(User).count()
     total_jobs = db.query(JobPosting).count()
@@ -274,8 +269,7 @@ def stats_trends(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     rows = db.execute(
@@ -312,8 +306,7 @@ def stats_weekly(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     since = datetime.now(timezone.utc) - timedelta(weeks=weeks)
 
@@ -360,8 +353,7 @@ def system_health(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     start = datetime.now(timezone.utc)
     try:
@@ -391,8 +383,7 @@ def list_links(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     query = select(TeacherStudentLink).order_by(TeacherStudentLink.id)
     if teacher_id:
@@ -436,8 +427,7 @@ def create_link(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     teacher = db.scalar(select(Teacher).where(Teacher.id == teacher_id))
     if not teacher:
@@ -481,8 +471,7 @@ def update_link(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     link = db.scalar(select(TeacherStudentLink).where(TeacherStudentLink.id == link_id))
     if not link:
@@ -506,8 +495,7 @@ def delete_link(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     link = db.scalar(select(TeacherStudentLink).where(TeacherStudentLink.id == link_id))
     if not link:
@@ -526,8 +514,7 @@ def batch_import_links(
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     """Batch import teacher-student links."""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     created = 0
     skipped = 0
@@ -574,8 +561,7 @@ def list_students(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     query = select(Student).order_by(Student.id)
     if major:
@@ -607,8 +593,7 @@ def create_student(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if not user:
@@ -631,8 +616,7 @@ def update_student(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     student = db.scalar(select(Student).where(Student.id == student_id))
     if not student:
@@ -652,8 +636,7 @@ def delete_student(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     student = db.scalar(select(Student).where(Student.id == student_id))
     if not student:
@@ -673,8 +656,7 @@ def list_teachers(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     total = db.scalar(select(func.count(Teacher.id))) or 0
     rows = db.scalars(select(Teacher).order_by(Teacher.id).offset(skip).limit(limit)).all()
@@ -704,8 +686,7 @@ def create_teacher(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if not user:
@@ -724,8 +705,7 @@ def delete_teacher(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     teacher = db.scalar(select(Teacher).where(Teacher.id == teacher_id))
     if not teacher:
@@ -749,8 +729,7 @@ def create_job(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     job = JobPosting(job_code=job_code, title=title, company_name=company_name,
                      city=city, salary=salary, industry=industry)
@@ -766,8 +745,7 @@ def delete_job(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     job = db.scalar(select(JobPosting).where(JobPosting.id == job_id))
     if not job:
@@ -787,8 +765,7 @@ def list_reports(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     total = db.scalar(select(func.count(CareerReport.id))) or 0
     rows = db.scalars(
@@ -818,8 +795,7 @@ def update_report_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
     if not report:
@@ -836,8 +812,7 @@ def delete_report(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     report = db.scalar(select(CareerReport).where(CareerReport.id == report_id))
     if not report:
@@ -855,8 +830,7 @@ def list_configs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问")
+    require_role(current_user.role, "admin")
 
     from app.models import SystemConfig
     configs = db.scalars(select(SystemConfig)).all()
@@ -877,8 +851,7 @@ def update_config(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权操作")
+    require_role(current_user.role, "admin")
 
     from app.models import SystemConfig
     config = db.scalar(select(SystemConfig).where(SystemConfig.key == config_key))

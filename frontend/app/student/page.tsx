@@ -304,6 +304,31 @@ export default function StudentMainPage() {
     setMessagesLoaded(true);
   }, []);
 
+  // Load historical chat messages when ?history=chat-{id} is present
+  useEffect(() => {
+    if (!historyId || !historyId.startsWith("chat-")) return;
+    const msgId = parseInt(historyId.replace("chat-", ""), 10);
+    if (isNaN(msgId)) return;
+
+    (async () => {
+      try {
+        const { getChatHistory } = await import("@/lib/api");
+        const res = await getChatHistory(msgId);
+        if (res.messages && res.messages.length > 0) {
+          setMessages(
+            res.messages.map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            }))
+          );
+        }
+        setMessagesLoaded(true);
+      } catch (err) {
+        console.error("Failed to load chat history:", err);
+      }
+    })();
+  }, [historyId]);
+
   const runPipeline = useCallback(
     async (
       sid: number,

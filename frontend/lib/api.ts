@@ -291,6 +291,10 @@ export async function getReport(reportId: number): Promise<ReportDraft> {
   return request<ReportDraft>(`/reports/${reportId}`);
 }
 
+export async function getLatestReport(): Promise<ReportDraft> {
+  return request<ReportDraft>("/reports/latest");
+}
+
 export type ReportCheckResult = {
   report_id: number;
   is_complete: boolean;
@@ -889,6 +893,36 @@ export async function renameHistoryItem(recordType: string, refId: number, custo
     method: "PATCH",
     body: JSON.stringify({ record_type: recordType, ref_id: refId, custom_title: customTitle }),
   });
+}
+
+export type HistoryDetailPayload = {
+  type: string;
+  ref_id: number;
+  [key: string]: unknown;
+};
+
+export async function getHistoryDetail(recordType: string, refId: number): Promise<HistoryDetailPayload> {
+  const res = await request<HistoryDetailPayload>(
+    `/students/me/history/detail?type=${encodeURIComponent(recordType)}&ref_id=${refId}`
+  );
+  return res;
+}
+
+export type ChatHistoryMessage = {
+  id: number;
+  role: string;
+  content: string;
+  created_at: string;
+  has_context: boolean;
+};
+
+export type ChatHistoryResponse = {
+  messages: ChatHistoryMessage[];
+  target_message_id: number;
+};
+
+export async function getChatHistory(messageId: number): Promise<ChatHistoryResponse> {
+  return await request<ChatHistoryResponse>(`/chat/history/${messageId}`);
 }
 
 export type JobListItem = {
