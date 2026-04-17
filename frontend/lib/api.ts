@@ -623,8 +623,9 @@ export async function deleteAdminPosition(positionId: number): Promise<void> {
 
 export type AdminStatsOverview = {
   total_users: number;
-  total_jobs: number;
+  total_positions: number;
   total_reports: number;
+  total_matches: number;
   avg_match_score: number;
 };
 

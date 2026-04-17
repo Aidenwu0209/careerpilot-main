@@ -288,21 +288,31 @@ def stats_overview(
 ) -> APIResponse:
     require_role(current_user.role, "admin")
 
-    total_users = db.query(User).count()
-    total_jobs = db.query(JobPosting).count()
-    total_reports = db.query(CareerReport).count()
+    total_users = db.scalar(select(func.count(User.id))) or 0
+    total_positions = db.scalar(select(func.count(JobProfile.id))) or 0
+    total_reports = db.scalar(select(func.count(CareerReport.id))) or 0
 
-    avg_score_row = db.scalar(
-        select(func.avg(MatchResult.total_score))
-    )
+    avg_score_row = db.scalar(select(func.avg(MatchResult.total_score)))
     avg_match_score = round(float(avg_score_row), 1) if avg_score_row else 0.0
+
+    total_matches = db.scalar(select(func.count(MatchResult.id))) or 0
 
     return APIResponse(data={
         "total_users": total_users,
-        "total_jobs": total_jobs,
+        "total_positions": total_positions,
         "total_reports": total_reports,
+        "total_matches": total_matches,
         "avg_match_score": avg_match_score,
     })
+
+
+def _app_tz_offset_hours() -> int:
+    """Return the UTC offset in hours for the application timezone (Asia/Shanghai = +8)."""
+    from app.core.config import get_settings
+    tz_name = get_settings().scheduler_timezone or "Asia/Shanghai"
+    from zoneinfo import ZoneInfo
+    now_local = datetime.now(ZoneInfo(tz_name))
+    return int(now_local.utcoffset().total_seconds() / 3600) if now_local.utcoffset() else 8
 
 
 @router.get("/stats/trends", response_model=APIResponse)
@@ -313,10 +323,12 @@ def stats_trends(
 ) -> APIResponse:
     require_role(current_user.role, "admin")
 
+    offset_h = _app_tz_offset_hours()
     since = datetime.now(timezone.utc) - timedelta(days=days)
+    # Convert UTC to local timezone before grouping by date so dates match user expectations
     rows = db.execute(
-        text("""
-            SELECT DATE(created_at) AS d,
+        text(f"""
+            SELECT DATE(created_at, '+{offset_h} hours') AS d,
                    SUM(CASE WHEN :reports_table = 1 THEN 1 ELSE 0 END) AS reports,
                    SUM(CASE WHEN :users_table = 1 THEN 1 ELSE 0 END) AS users
             FROM (
@@ -324,7 +336,7 @@ def stats_trends(
                 UNION ALL
                 SELECT created_at, 0, 1 FROM users WHERE created_at >= :since
             ) sub
-            GROUP BY DATE(created_at)
+            GROUP BY DATE(created_at, '+{offset_h} hours')
             ORDER BY d
         """),
         {"since": since, "reports_table": 1, "users_table": 1},
@@ -350,11 +362,12 @@ def stats_weekly(
 ) -> APIResponse:
     require_role(current_user.role, "admin")
 
+    offset_h = _app_tz_offset_hours()
     since = datetime.now(timezone.utc) - timedelta(weeks=weeks)
 
     report_rows = db.execute(
-        text("""
-            SELECT strftime('%Y-W%W', created_at) AS week_label,
+        text(f"""
+            SELECT strftime('%Y-W%W', created_at, '+{offset_h} hours') AS week_label,
                    COUNT(*) AS cnt
             FROM career_reports
             WHERE created_at >= :since
@@ -366,8 +379,8 @@ def stats_weekly(
     report_map = {r[0]: int(r[1]) for r in report_rows}
 
     match_rows = db.execute(
-        text("""
-            SELECT strftime('%Y-W%W', created_at) AS week_label,
+        text(f"""
+            SELECT strftime('%Y-W%W', created_at, '+{offset_h} hours') AS week_label,
                    COUNT(*) AS cnt
             FROM match_results
             WHERE created_at >= :since

@@ -113,7 +113,7 @@ export default function AdminPage() {
               </div>
               <div className="admin-stat-card">
                 <span className="admin-stat-card__label">岗位数据</span>
-                <div className="admin-stat-card__value">{stats?.total_jobs ?? 0}</div>
+                <div className="admin-stat-card__value">{stats?.total_positions ?? 0}</div>
                 <span className="admin-stat-card__change">已入库岗位</span>
               </div>
               <div className="admin-stat-card">
