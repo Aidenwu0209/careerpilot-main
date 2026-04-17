@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, timezone
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.errors import require_role
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db_session
@@ -44,8 +44,9 @@ class AdminUserUpdate(BaseModel):
     email: str | None = None
 
 
-def _serialize_user(user: User) -> dict:
-    return {
+def _serialize_user(user: User, db: Session, include_profile: bool = False) -> dict:
+    """Serialize user to dict, optionally including role-specific profile fields."""
+    data = {
         "id": user.id,
         "username": user.username,
         "full_name": user.full_name,
@@ -54,6 +55,28 @@ def _serialize_user(user: User) -> dict:
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
+    if include_profile:
+        if user.role == "student":
+            student = db.scalar(select(Student).where(Student.user_id == user.id))
+            if student:
+                data["profile"] = {
+                    "student_id": student.id,
+                    "major": student.major,
+                    "grade": student.grade,
+                    "career_goal": student.career_goal,
+                    "target_job_code": student.target_job_code,
+                    "target_job_title": student.target_job_title,
+                    "learning_preferences": student.learning_preferences,
+                }
+        elif user.role == "teacher":
+            teacher = db.scalar(select(Teacher).where(Teacher.user_id == user.id))
+            if teacher:
+                data["profile"] = {
+                    "teacher_id": teacher.id,
+                    "department": teacher.department,
+                    "title": teacher.title,
+                }
+    return data
 
 
 def _ensure_role_profile(db: Session, user: User) -> None:
@@ -67,17 +90,36 @@ def _ensure_role_profile(db: Session, user: User) -> None:
 def list_users(
     skip: int = 0,
     limit: int = 50,
+    keyword: str = Query("", description="搜索关键词，匹配 username/email/full_name"),
+    role: str = Query("", description="按角色过滤：student/teacher/admin"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session),
 ) -> APIResponse:
     require_role(current_user.role, "admin")
 
-    total = db.query(User).count()
-    rows = db.scalars(select(User).order_by(User.id).offset(skip).limit(limit)).all()
+    query = select(User).order_by(User.id)
+    count_query = select(func.count(User.id))
+
+    if keyword:
+        pattern = f"%{keyword}%"
+        filter_cond = or_(
+            User.username.ilike(pattern),
+            User.email.ilike(pattern),
+            User.full_name.ilike(pattern),
+        )
+        query = query.where(filter_cond)
+        count_query = count_query.where(filter_cond)
+
+    if role and role in VALID_USER_ROLES:
+        query = query.where(User.role == role)
+        count_query = count_query.where(User.role == role)
+
+    total = db.scalar(count_query)
+    rows = db.scalars(query.offset(skip).limit(limit)).all()
 
     return APIResponse(data={
         "total": total,
-        "items": [_serialize_user(u) for u in rows],
+        "items": [_serialize_user(u, db) for u in rows],
     })
 
 
@@ -112,7 +154,7 @@ def create_user(
         db.rollback()
         raise HTTPException(status_code=400, detail="用户创建失败，请检查用户名或关联数据是否重复") from exc
     db.refresh(user)
-    return APIResponse(data=_serialize_user(user))
+    return APIResponse(data=_serialize_user(user, db, include_profile=True))
 
 
 @router.get("/users/{user_id}", response_model=APIResponse)
@@ -127,7 +169,7 @@ def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    return APIResponse(data=_serialize_user(user))
+    return APIResponse(data=_serialize_user(user, db, include_profile=True))
 
 
 @router.put("/users/{user_id}", response_model=APIResponse)
@@ -169,7 +211,7 @@ def update_user(
         raise HTTPException(status_code=400, detail="用户更新失败，请检查数据是否重复") from exc
     db.refresh(user)
 
-    return APIResponse(data=_serialize_user(user))
+    return APIResponse(data=_serialize_user(user, db, include_profile=True))
 
 
 @router.delete("/users/{user_id}", response_model=APIResponse)
