@@ -12,10 +12,13 @@ import {
   getReport,
   polishReport,
   saveReport,
+  getStudentTeacherFeedback,
+  markFeedbackRead,
   type PathPlan,
   type ReportCheckResult,
   type ReportDraft,
   type ReportExportResult,
+  type TeacherFeedbackItem,
 } from "@/lib/api";
 import { SectionCard } from "@/components/SectionCard";
 import { StudentShellClient } from "@/components/StudentShellClient";
@@ -47,6 +50,8 @@ export default function ResultPage() {
   const [checkResult, setCheckResult] = useState<ReportCheckResult | null>(null);
   const [exportResult, setExportResult] = useState<ReportExportResult | null>(null);
   const [notice, setNotice] = useState("");
+  const [teacherFeedback, setTeacherFeedback] = useState<TeacherFeedbackItem[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
 
   useEffect(() => {
     if (!Number.isFinite(reportId) || reportId <= 0) {
@@ -65,6 +70,20 @@ export default function ResultPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "报告加载失败"))
       .finally(() => setLoading(false));
+
+    // Load teacher feedback for this student
+    setFeedbackLoading(true);
+    getStudentTeacherFeedback()
+      .then((items) => {
+        // Filter feedback for current report
+        setTeacherFeedback(items.filter((f) => f.report_id === reportId));
+        // Auto-mark unread feedback as read
+        items.filter((f) => f.report_id === reportId && !f.student_read_at).forEach((f) => {
+          markFeedbackRead(f.id).catch(() => {});
+        });
+      })
+      .catch(() => setTeacherFeedback([]))
+      .finally(() => setFeedbackLoading(false));
   }, [reportId]);
 
   const canOperate = useMemo(() => Boolean(report && draft.trim() && !busy), [report, draft, busy]);
@@ -316,6 +335,48 @@ export default function ResultPage() {
               <div className="ai-report">
                 <Markdown>{draft || "暂无报告内容"}</Markdown>
               </div>
+            )}
+          </SectionCard>
+
+          {/* Teacher feedback section */}
+          <SectionCard title="教师点评">
+            {feedbackLoading ? (
+              <p style={{ textAlign: "center", padding: "20px", color: "#888" }}>加载中...</p>
+            ) : teacherFeedback.length > 0 ? (
+              <div style={{ display: "grid", gap: 12 }}>
+                {teacherFeedback.map((fb) => (
+                  <div
+                    key={fb.id}
+                    style={{
+                      border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8,
+                      padding: 14, background: "#f8fafc",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: "0.875rem" }}>{fb.teacher_name}</span>
+                        {fb.priority && fb.priority !== "normal" && (
+                          <span style={{
+                            padding: "1px 8px", borderRadius: 10, fontSize: "0.7rem", fontWeight: 600,
+                            background: fb.priority === "urgent" ? "rgba(239,68,68,0.1)" : fb.priority === "high" ? "rgba(245,158,11,0.1)" : "rgba(107,114,128,0.1)",
+                            color: fb.priority === "urgent" ? "#ef4444" : fb.priority === "high" ? "#f59e0b" : "#6b7280",
+                          }}>
+                            {fb.priority === "urgent" ? "紧急" : fb.priority === "high" ? "高" : fb.priority === "low" ? "低" : fb.priority}
+                          </span>
+                        )}
+                      </div>
+                      {fb.created_at && (
+                        <span style={{ fontSize: "0.75rem", color: "var(--subtle)" }}>
+                          {new Date(fb.created_at).toLocaleString("zh-CN")}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{fb.comment}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ textAlign: "center", padding: "20px", color: "#888" }}>暂无教师点评</p>
             )}
           </SectionCard>
         </>

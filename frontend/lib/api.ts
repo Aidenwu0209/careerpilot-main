@@ -779,6 +779,8 @@ export type TeacherCommentItem = {
   priority: string;
   visible_to_student: boolean;
   student_read_at: string | null;
+  follow_up_status: string | null;
+  next_follow_up_date: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -786,11 +788,16 @@ export type TeacherCommentItem = {
 export async function createTeacherComment(
   reportId: number,
   commentText: string,
-  priority: string = "normal",
-  visibleToStudent: boolean = true,
-): Promise<{ id: number; comment: string; priority: string; visible_to_student: boolean; created_at: string | null }> {
-  const res = await request<{ data: { id: number; comment: string; priority: string; visible_to_student: boolean; created_at: string | null } }>(
-    `/teacher/reports/${reportId}/comments?comment_text=${encodeURIComponent(commentText)}&priority=${priority}&visible_to_student=${visibleToStudent}`,
+  options: { priority?: string; visible_to_student?: boolean; follow_up_status?: string; next_follow_up_date?: string } = {},
+): Promise<{ id: number; comment: string; priority: string; visible_to_student: boolean; follow_up_status: string | null; next_follow_up_date: string | null; created_at: string | null }> {
+  const params = new URLSearchParams();
+  params.set("comment_text", commentText);
+  params.set("priority", options.priority || "normal");
+  params.set("visible_to_student", String(options.visible_to_student !== false));
+  if (options.follow_up_status) params.set("follow_up_status", options.follow_up_status);
+  if (options.next_follow_up_date) params.set("next_follow_up_date", options.next_follow_up_date);
+  const res = await request<{ data: { id: number; comment: string; priority: string; visible_to_student: boolean; follow_up_status: string | null; next_follow_up_date: string | null; created_at: string | null } }>(
+    `/teacher/reports/${reportId}/comments?${params.toString()}`,
     { method: "POST" },
   );
   return res.data;
@@ -803,13 +810,15 @@ export async function getTeacherComments(reportId: number): Promise<TeacherComme
 
 export async function updateTeacherComment(
   commentId: number,
-  data: { comment_text?: string; priority?: string; visible_to_student?: boolean },
-): Promise<{ id: number; comment: string; priority: string; visible_to_student: boolean; updated_at: string | null }> {
+  data: { comment_text?: string; priority?: string; visible_to_student?: boolean; follow_up_status?: string; next_follow_up_date?: string },
+): Promise<{ id: number; comment: string; priority: string; visible_to_student: boolean; follow_up_status: string | null; next_follow_up_date: string | null; updated_at: string | null }> {
   const params = new URLSearchParams();
   if (data.comment_text !== undefined) params.set("comment_text", data.comment_text);
   if (data.priority !== undefined) params.set("priority", data.priority);
   if (data.visible_to_student !== undefined) params.set("visible_to_student", String(data.visible_to_student));
-  const res = await request<{ data: { id: number; comment: string; priority: string; visible_to_student: boolean; updated_at: string | null } }>(
+  if (data.follow_up_status !== undefined) params.set("follow_up_status", data.follow_up_status);
+  if (data.next_follow_up_date !== undefined) params.set("next_follow_up_date", data.next_follow_up_date);
+  const res = await request<{ data: { id: number; comment: string; priority: string; visible_to_student: boolean; follow_up_status: string | null; next_follow_up_date: string | null; updated_at: string | null } }>(
     `/teacher/comments/${commentId}?${params.toString()}`,
     { method: "PUT" },
   );
