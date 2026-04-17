@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Markdown from "react-markdown";
 import {
   sendChatMessage,
@@ -130,7 +130,9 @@ function buildSteps(
 
 export default function StudentMainPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const historyId = searchParams.get("history");
+  const isHistoricalChatView = !!(historyId && historyId.startsWith("chat-"));
   const [query, setQuery] = useState("");
   const [showGuide, setShowGuide] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -263,9 +265,10 @@ export default function StudentMainPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Save messages to localStorage whenever they change
+  // Save messages to localStorage whenever they change (skip in historical view)
   useEffect(() => {
     if (!messagesLoaded) return;
+    if (isHistoricalChatView) return;
     const key = getAccountStorageKey("chat_messages");
     if (!key) return;
     if (messages.length > 0) {
@@ -273,7 +276,7 @@ export default function StudentMainPage() {
     } else {
       localStorage.removeItem(key);
     }
-  }, [messages, messagesLoaded]);
+  }, [messages, messagesLoaded, isHistoricalChatView]);
 
   // Load messages from localStorage on mount
   useEffect(() => {
@@ -310,6 +313,16 @@ export default function StudentMainPage() {
     const msgId = parseInt(historyId.replace("chat-", ""), 10);
     if (isNaN(msgId)) return;
 
+    // Backup current messages before overwriting with historical ones
+    const currentKey = getAccountStorageKey("chat_messages");
+    const backupKey = getAccountStorageKey("chat_messages_current_backup");
+    if (currentKey && backupKey) {
+      const current = localStorage.getItem(currentKey);
+      if (current && !localStorage.getItem(backupKey)) {
+        localStorage.setItem(backupKey, current);
+      }
+    }
+
     (async () => {
       try {
         const { getChatHistory } = await import("@/lib/api");
@@ -328,6 +341,39 @@ export default function StudentMainPage() {
       }
     })();
   }, [historyId]);
+
+  // Cleanup backup when not in historical view
+  useEffect(() => {
+    if (isHistoricalChatView) return;
+    const backupKey = getAccountStorageKey("chat_messages_current_backup");
+    if (backupKey) {
+      localStorage.removeItem(backupKey);
+    }
+  }, [isHistoricalChatView]);
+
+  // Return from historical chat view to current conversation
+  const exitHistoricalView = useCallback(() => {
+    const backupKey = getAccountStorageKey("chat_messages_current_backup");
+    if (backupKey) {
+      const backup = localStorage.getItem(backupKey);
+      if (backup) {
+        try {
+          const parsed = JSON.parse(backup);
+          if (Array.isArray(parsed)) {
+            setMessages(parsed);
+          }
+        } catch {
+          setMessages([]);
+        }
+        localStorage.removeItem(backupKey);
+      } else {
+        setMessages([]);
+      }
+    } else {
+      setMessages([]);
+    }
+    router.push("/student");
+  }, [router]);
 
   const runPipeline = useCallback(
     async (
@@ -796,7 +842,6 @@ export default function StudentMainPage() {
 
   const needsJobSelect = !jobCode && uploadedFiles.length > 0 && !pipelineRunning && !pipelineDone && !jobSelectorDismissed;
   const inputIsCompact = isLoading || pipelineRunning;
-  const isHistoricalChatView = historyId && historyId.startsWith("chat-");
 
   return (
     <div
@@ -952,6 +997,9 @@ export default function StudentMainPage() {
                 const key = getAccountStorageKey("chat_messages");
                 if (key) localStorage.removeItem(key);
                 localStorage.removeItem("chat_messages");
+                // Clear historical backup if exists
+                const backupKey = getAccountStorageKey("chat_messages_current_backup");
+                if (backupKey) localStorage.removeItem(backupKey);
                 setMessages([]);
                 setQuery("");
                 setPipelineCurrent(null);
@@ -971,6 +1019,10 @@ export default function StudentMainPage() {
                 setUploadSuccess("");
                 clearFiles().catch(() => {});
                 setUploadedFiles([]);
+                // If in historical view, navigate to /student to exit
+                if (isHistoricalChatView) {
+                  router.push("/student");
+                }
                 loadGreeting();
                 getStudentSession()
                   .then((s) => {
@@ -993,15 +1045,35 @@ export default function StudentMainPage() {
           <div className="chat-messages">
             {isHistoricalChatView && (
               <div style={{
-                padding: "8px 14px",
+                padding: "10px 16px",
                 marginBottom: "12px",
                 background: "#fff3e0",
                 borderRadius: "8px",
                 fontSize: "0.875rem",
-                color: "#f57c00",
-                textAlign: "center",
+                color: "#e65100",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
               }}>
-                ⚠️ 正在查看历史对话记录
+                <span>⚠️ 正在查看历史对话记录（只读）</span>
+                <button
+                  onClick={exitHistoricalView}
+                  style={{
+                    padding: "4px 14px",
+                    borderRadius: 6,
+                    border: "1px solid #e65100",
+                    background: "#fff",
+                    color: "#e65100",
+                    cursor: "pointer",
+                    fontSize: "0.8125rem",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    minHeight: 28,
+                  }}
+                >
+                  返回当前对话
+                </button>
               </div>
             )}
             {messages.map((msg, i) => (
@@ -1036,6 +1108,19 @@ export default function StudentMainPage() {
 
           <div className={`student-main__input-area${inputIsCompact ? " is-compact" : ""}`}>
             <div className="student-main__input-wrapper">
+              {isHistoricalChatView ? (
+                <div style={{
+                  padding: "10px 16px",
+                  background: "#f5f5f5",
+                  borderRadius: "8px",
+                  textAlign: "center",
+                  color: "#999",
+                  fontSize: "0.875rem",
+                }}>
+                  历史对话为只读模式，如需发送消息请先返回当前对话
+                </div>
+              ) : (
+                <>
               <div className="student-main__input-row">
                 <input
                   className="student-main__input"
@@ -1063,6 +1148,8 @@ export default function StudentMainPage() {
               {uploadError && <p className="student-main__upload-error">{uploadError}</p>}
               {uploadSuccess && <p className="student-main__upload-success">{uploadSuccess}</p>}
               {!inputIsCompact && renderFileList()}
+                </>
+              )}
             </div>
           </div>
         </>
