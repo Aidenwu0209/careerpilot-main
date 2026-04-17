@@ -334,7 +334,8 @@ def get_recommended_jobs(
     }
     experience = extract_resume_experience_context(db, current_user.id, source_summary=student_profile.source_summary if student_profile else "")
     max_recommended = 30
-    min_score = 60.0
+    min_recommended = min(8, len(all_profiles))
+    quality_floor = 35.0
 
     if student_profile:
         scored_profiles = []
@@ -343,15 +344,24 @@ def get_recommended_jobs(
             posting = postings.get(jp.job_code)
             scoring = score_recommended_job(student_profile, jp, experience, posting)
             final_score = scoring["score"]
-            if final_score < min_score:
-                continue
             scored_profiles.append((final_score, scoring, jp, posting))
 
-        scored_profiles.sort(key=lambda item: item[0], reverse=True)
+        scored_profiles.sort(
+            key=lambda item: (
+                item[0],
+                item[1].get("skill_score", 0),
+                item[1].get("experience_score", 0),
+            ),
+            reverse=True,
+        )
+        qualified_profiles = [item for item in scored_profiles if item[0] >= quality_floor]
+        if len(qualified_profiles) < min_recommended:
+            qualified_profiles = scored_profiles[:min_recommended]
+
         diversified_profiles = []
         title_counts: dict[str, int] = {}
         max_per_title = 6
-        for item in scored_profiles:
+        for item in qualified_profiles:
             title = item[2].title
             if title_counts.get(title, 0) >= max_per_title:
                 continue
@@ -361,9 +371,9 @@ def get_recommended_jobs(
                 break
 
         logger.info(
-            "推荐岗位统计: 总岗位数=%s, 60分以上岗位数=%s, 多样化后=%s, 项目数=%s, 实习数=%s, 将返回=%s",
+            "推荐岗位统计: 总岗位数=%s, 质量线以上岗位数=%s, 多样化后=%s, 项目数=%s, 实习数=%s, 将返回=%s",
             len(all_profiles),
-            len(scored_profiles),
+            len([item for item in scored_profiles if item[0] >= quality_floor]),
             len(diversified_profiles),
             experience["project_count"],
             experience["internship_count"],
@@ -374,7 +384,11 @@ def get_recommended_jobs(
             company_name = posting.company_name if posting else "推荐岗位"
             salary_range = posting.salary_range if posting and posting.salary_range else ""
             skills = jp.skill_requirements[:5] if jp.skill_requirements else []
-            matched = list(dict.fromkeys(scoring["matched_skills"] + scoring["experience_tags"] + scoring["intent_tags"]))[:6]
+            matched = list(dict.fromkeys(
+                scoring["matched_skills"]
+                + scoring["experience_tags"]
+                + scoring["intent_tags"]
+            ))[:6]
             missing = scoring["missing_skills"][:4]
 
             reason = generate_recommendation_reason(
@@ -787,6 +801,8 @@ def get_teacher_feedback(
             "comment": c.comment,
             "priority": c.priority,
             "student_read_at": c.student_read_at.isoformat() if c.student_read_at else None,
+            "follow_up_status": c.follow_up_status,
+            "next_follow_up_date": c.next_follow_up_date.isoformat() if c.next_follow_up_date else None,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         })
 

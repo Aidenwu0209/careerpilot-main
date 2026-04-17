@@ -11,6 +11,7 @@ from app.core.errors import raise_resource_forbidden, require_role
 from app.models import AnalysisRun, PathRecommendation, Student, User
 from app.schemas.common import APIResponse
 from app.services.bootstrap import ServiceContainer
+from app.services.paths.career_path_service import clean_current_ability
 
 router = APIRouter()
 
@@ -114,7 +115,7 @@ def _path_to_dict(path_result: PathRecommendation) -> dict[str, Any]:
         "gaps": path_result.gaps_json or [],
         "recommendations": path_result.recommendations_json or [],
         "rationale": "基于岗位图谱的晋升链路和转岗链路，结合学生当前技能覆盖情况生成主路径与备选路径。",
-        "current_ability": path_result.current_ability_json or {},
+        "current_ability": clean_current_ability(path_result.current_ability_json or {}),
         "certificate_recommendations": path_result.certificate_recommendations_json or [],
         "learning_resources": path_result.learning_resources_json or [],
         "evaluation_metrics": path_result.evaluation_metrics_json or [],

@@ -46,6 +46,8 @@ def get_latest_report(
     if not report.content_json or not report.markdown_content:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告尚未生成")
 
+    report = container.report_service._standardize_report(db, report)
+
     # Check source files status
     source_files_deleted = False
     if report.profile_version_id:
@@ -104,7 +106,6 @@ def get_report(
             if existing_count < len(pv.uploaded_file_ids):
                 source_files_deleted = True
 
-    from sqlalchemy import func
     return ReportResponse(
         report_id=report.id,
         student_id=report.student_id,
