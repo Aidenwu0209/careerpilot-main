@@ -904,3 +904,199 @@ def update_config(
         db.add(config)
     db.commit()
     return APIResponse(data={"key": config_key, "value": value})
+
+
+# --- Position (JobProfile) CRUD (US-023) ---
+
+def _serialize_position(p: "JobProfile") -> dict:
+    return {
+        "id": p.id,
+        "job_code": p.job_code,
+        "title": p.title,
+        "summary": p.summary or "",
+        "skill_requirements": p.skill_requirements or [],
+        "certificate_requirements": p.certificate_requirements or [],
+        "innovation_requirements": p.innovation_requirements or "",
+        "learning_requirements": p.learning_requirements or "",
+        "resilience_requirements": p.resilience_requirements or "",
+        "communication_requirements": p.communication_requirements or "",
+        "internship_requirements": p.internship_requirements or "",
+        "capability_scores": p.capability_scores or {},
+        "dimension_weights": p.dimension_weights or {},
+        "explanation_json": p.explanation_json or {},
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
+
+
+@router.get("/positions", response_model=APIResponse)
+def list_positions(
+    keyword: str = "",
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """搜索职位画像列表，支持按 job_code/title 关键词过滤。"""
+    require_role(current_user.role, "admin")
+
+    stmt = select(JobProfile).order_by(JobProfile.id.desc())
+    if keyword.strip():
+        pattern = f"%{keyword.strip()}%"
+        stmt = stmt.where(
+            or_(
+                JobProfile.job_code.ilike(pattern),
+                JobProfile.title.ilike(pattern),
+            )
+        )
+    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    items = db.scalars(stmt.offset(skip).limit(limit)).all()
+    return APIResponse(data={"total": total, "items": [_serialize_position(p) for p in items]})
+
+
+@router.post("/positions", response_model=APIResponse)
+def create_position(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """创建新的职位画像。"""
+    require_role(current_user.role, "admin")
+
+    job_code = (body.get("job_code") or "").strip()
+    title = (body.get("title") or "").strip()
+    if not job_code:
+        raise HTTPException(status_code=400, detail="job_code 不能为空")
+    if not title:
+        raise HTTPException(status_code=400, detail="title 不能为空")
+
+    # 手动检查 job_code 唯一性（模型层无唯一约束）
+    existing = db.scalar(select(JobProfile).where(JobProfile.job_code == job_code))
+    if existing:
+        raise HTTPException(status_code=400, detail=f"job_code '{job_code}' 已存在")
+
+    position = JobProfile(
+        job_code=job_code,
+        title=title,
+        summary=body.get("summary", ""),
+        skill_requirements=body.get("skill_requirements", []),
+        certificate_requirements=body.get("certificate_requirements", []),
+        innovation_requirements=body.get("innovation_requirements", ""),
+        learning_requirements=body.get("learning_requirements", ""),
+        resilience_requirements=body.get("resilience_requirements", ""),
+        communication_requirements=body.get("communication_requirements", ""),
+        internship_requirements=body.get("internship_requirements", ""),
+        capability_scores=body.get("capability_scores", {}),
+        dimension_weights=body.get("dimension_weights", {}),
+        explanation_json=body.get("explanation_json", {}),
+    )
+    try:
+        db.add(position)
+        db.commit()
+        db.refresh(position)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"job_code '{job_code}' 已存在或数据冲突")
+
+    return APIResponse(data=_serialize_position(position))
+
+
+@router.get("/positions/{position_id}", response_model=APIResponse)
+def get_position(
+    position_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """获取单个职位画像详情。"""
+    require_role(current_user.role, "admin")
+
+    position = db.scalar(select(JobProfile).where(JobProfile.id == position_id))
+    if not position:
+        raise HTTPException(status_code=404, detail="职位画像不存在")
+    return APIResponse(data=_serialize_position(position))
+
+
+@router.put("/positions/{position_id}", response_model=APIResponse)
+def update_position(
+    position_id: int,
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """更新职位画像字段。"""
+    require_role(current_user.role, "admin")
+
+    position = db.scalar(select(JobProfile).where(JobProfile.id == position_id))
+    if not position:
+        raise HTTPException(status_code=404, detail="职位画像不存在")
+
+    updatable = {
+        "job_code", "title", "summary",
+        "skill_requirements", "certificate_requirements",
+        "innovation_requirements", "learning_requirements",
+        "resilience_requirements", "communication_requirements",
+        "internship_requirements",
+        "capability_scores", "dimension_weights", "explanation_json",
+    }
+    for field in updatable:
+        if field in body:
+            setattr(position, field, body[field])
+
+    if "job_code" in body and not (body["job_code"] or "").strip():
+        raise HTTPException(status_code=400, detail="job_code 不能为空")
+
+    # 检查 job_code 唯一性（排除自身）
+    if "job_code" in body and body["job_code"]:
+        dup = db.scalar(
+            select(JobProfile).where(
+                JobProfile.job_code == body["job_code"],
+                JobProfile.id != position_id,
+            )
+        )
+        if dup:
+            raise HTTPException(status_code=400, detail="job_code 已存在")
+
+    try:
+        db.commit()
+        db.refresh(position)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="job_code 已存在或数据冲突")
+
+    return APIResponse(data=_serialize_position(position))
+
+
+@router.delete("/positions/{position_id}", response_model=APIResponse)
+def delete_position(
+    position_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+) -> APIResponse:
+    """删除职位画像，同时清理关联的 certificates_required 记录。"""
+    require_role(current_user.role, "admin")
+
+    position = db.scalar(select(JobProfile).where(JobProfile.id == position_id))
+    if not position:
+        raise HTTPException(status_code=404, detail="职位画像不存在")
+
+    # 检查是否有关联的 MatchResult 引用
+    from app.models import MatchResult as MR
+    ref_count = db.scalar(
+        select(func.count()).select_from(
+            select(MR).where(MR.job_profile_id == position_id).subquery()
+        )
+    )
+    if ref_count and ref_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"该职位画像有 {ref_count} 条关联的匹配结果，无法删除",
+        )
+
+    # 删除关联的证书记录
+    from app.models import CertificateRequired as CR
+    certs = db.scalars(select(CR).where(CR.job_profile_id == position_id)).all()
+    for c in certs:
+        db.delete(c)
+    db.delete(position)
+    db.commit()
+    return APIResponse(data={"deleted": True, "id": position_id})
