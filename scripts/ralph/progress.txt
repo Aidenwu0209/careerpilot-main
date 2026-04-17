@@ -283,3 +283,43 @@
   - 在 `useCallback` 中使用 `router.push("/student")` 可以在同一 App Router 页面内更新 URL 参数而不导致组件卸载
   - 需要手动浏览器验证：从历史页点击聊天记录 → 查看历史消息 → 点击返回当前对话 → 确认当前消息恢复
 ---
+
+## 2026-04-17 10:03 - US-014
+- 实现了学生门户导航引导和页面体验优化：
+  - 将简单的"两步使用指南"升级为完整的 5 步有序使用路径引导（上传简历→选择目标岗位→等待分析完成→查看结果→回顾历史）
+  - 引导面板默认展开，支持收起/展开切换，有独立的 CSS 类体系
+  - 修复了 `student-main` 的 `overflow: hidden` 导致长内容无法滚动的问题，改为 `overflow-y: auto; overflow-x: hidden`
+  - 添加了 `student-layout__body` 的 `-webkit-overflow-scrolling: touch` 和 `overflow-x: hidden`，改善 iOS 滚动体验
+  - 添加了缺失的 `.btn-secondary` CSS 类定义（matching/path/profile 等子页面的"返回问答页"按钮使用的类）
+  - 添加了引导面板的移动端响应式样式
+- TypeScript 类型检查通过（0 错误）
+- 更改文件：`frontend/app/student/page.tsx`, `frontend/app/globals.css`
+- **未来迭代的学习：**
+  - `.btn-secondary` 类之前在多个子页面（matching, path, profile）中作为 className 使用但未在 globals.css 中定义，按钮样式依赖浏览器默认。任何新 CSS 类引入前必须确认是否有对应的样式定义。
+  - `student-layout` 使用 `height: 100dvh` + `overflow: hidden` 的全屏布局模式，滚动依赖 `student-layout__body` 的 `overflow-y: auto`。子页面内容较长时不需要自己的 overflow 处理。
+  - `student-main`（首页组件）内容包含指南、管道进度、结果区域等，内容可能超出视口高度，必须允许纵向滚动。
+  - 需要手动浏览器验证：首页引导展开/收起、各子页面滚动、移动端响应式、返回按钮导航
+---
+
+## 2026-04-17 11:52 - US-015
+- 验证了后端注册已支持 teacher_code 可选（RegisterRequest 默认 None，register_user 空 teacher_code 不查找老师）
+- 验证了 /student/info 页面已有教师绑定显示和更新功能（_get_primary_teacher_info 返回 null 表示未绑定）
+- 验证了删除流程（admin DELETE /users/{id}）和更新流程（PUT /students/me）在无教师绑定时正常工作
+- 在学生主页（/student）添加了"尚未绑定指导老师"引导提示，包含 3 项不可用功能说明和"前往绑定老师"链接
+- 添加了 CSS 样式：琥珀色左边框、功能列表、响应式布局
+- 创建了 `test_optional_teacher_binding.py` 包含 12 个测试：
+  - 3 个注册无教师绑定测试（omit、empty、null）
+  - 2 个未绑定学生 session 测试（teacher=null、绑定后 teacher 非 null）
+  - 2 个无绑定更新测试（空 teacher_code、省略 teacher_code）
+  - 3 个后续绑定测试（用户名绑定、邮箱绑定、无效 teacher_code）
+  - 2 个删除测试（未绑定可删除、绑定后删除被阻止）
+- 所有 12 个测试通过，TypeScript 类型检查通过
+- 浏览器测试通过：注册无教师绑定 → 首页显示引导提示 → 点击"前往绑定老师" → 信息页显示绑定说明和输入框
+- Changed files: `frontend/app/student/page.tsx`, `frontend/app/globals.css`, `backend/tests/unit/test_optional_teacher_binding.py`
+- **未来迭代的学习：**
+  - 教师绑定关系通过独立的 `TeacherStudentLink` 表实现，Student 模型本身没有 teacher 字段
+  - `TeacherStudentLink.source` 字段区分绑定来源：manual、invite_code、batch_import、student_profile
+  - `_find_teacher_by_code` 通过 User.username 或 User.email + Teacher join 查找，支持两种方式绑定
+  - `/student/info` 页面已有完整的教师绑定更新 UI，teacher_code 为空时不改变现有绑定
+  - 测试中 API 路径前缀为 `/api/v1/`，不要忘记
+---

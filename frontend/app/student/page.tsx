@@ -905,6 +905,29 @@ export default function StudentMainPage() {
         </div>
       </div>
 
+      {/* Teacher binding notice for unbound students */}
+      {!session?.teacher && (
+        <div className="student-teacher-binding-notice">
+          <div className="student-teacher-binding-notice__inner">
+            <div className="student-teacher-binding-notice__header">
+              <Icon name="alert-circle" size={18} />
+              <strong>尚未绑定指导老师</strong>
+            </div>
+            <p className="student-teacher-binding-notice__desc">
+              绑定老师后，你可以获得以下功能：
+            </p>
+            <ul className="student-teacher-binding-notice__features">
+              <li><Icon name="check-circle" size={14} color="#16a34a" />老师可以查看你的分析报告并提供个性化指导</li>
+              <li><Icon name="check-circle" size={14} color="#16a34a" />接收老师的跟进建议和职业发展反馈</li>
+              <li><Icon name="check-circle" size={14} color="#16a34a" />在老师的班级管理中被统一跟踪和辅导</li>
+            </ul>
+            <Link href="/student/info" className="btn-primary student-teacher-binding-notice__action">
+              前往绑定老师
+            </Link>
+          </div>
+        </div>
+      )}
+
       {renderPipeline()}
       {renderPipelineResult()}
 
