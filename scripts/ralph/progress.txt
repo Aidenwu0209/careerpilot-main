@@ -510,3 +510,72 @@
   - `adminNavItems` 在 admin 子页面中重复定义（jobs, users, system, stats 共 4 处），新增导航项需要同步修改所有文件
   - 岗位画像的 `capability_scores` 和 `dimension_weights` 是复杂 JSON 字段，当前 UI 未暴露编辑入口，仅传递空对象，后续可按需添加
 ---
+
+## 2026-04-17 20:00 - US-025
+- 修复了 stats/overview 端点：从 JobPosting 改为 JobProfile 计数，新增 total_matches 字段
+- 修复了 stats/trends 和 stats/weekly 的时区归一化：DATE() 和 strftime() 现在先转换为 Asia/Shanghai 时区再按日期分组
+- 添加了 `_app_tz_offset_hours()` 辅助函数，从 config.scheduler_timezone 动态读取时区偏移
+- 创建了 9 个测试覆盖：overview 字段完整性、计数匹配 DB、非负检查、时区边界（UTC 23:30→次日、UTC 01:00→同日）、未认证 401、学生 403
+- 更新了前端 AdminStatsOverview 类型：total_jobs → total_positions，新增 total_matches
+- TypeScript 类型检查通过
+- Changed files: backend/app/api/routers/admin.py, backend/tests/unit/test_admin_stats_aggregation.py, frontend/lib/api.ts, frontend/app/admin/page.tsx, frontend/app/admin/stats/page.tsx
+---
+
+## 2026-04-17 20:15 - US-026
+- 重写了 admin stats 页面，添加了每日趋势图（带 7/14/30 天时间范围选择器）
+- 显示活动时间范围标签和时区信息（Asia/Shanghai UTC+8）
+- 添加了区间汇总（新用户/新报告计数）
+- 保留了周度趋势图
+- 更新了总览卡片：注册用户、职位画像、累计报告、累计匹配（含平均分）
+- TypeScript 类型检查通过
+- Changed files: frontend/app/admin/stats/page.tsx
+---
+
+## 2026-04-17 20:30 - US-027
+- 在登录页面添加了密码显示/隐藏切换按钮
+- 在注册页面添加了密码和确认密码的显示/隐藏切换按钮
+- 切换不会清除已输入的值
+- 使用 position: relative + absolute 布局，tabIndex=-1 防止键盘导航干扰
+- TypeScript 类型检查通过
+- Changed files: frontend/app/login/page.tsx, frontend/app/register/page.tsx
+---
+
+## 2026-04-17 20:45 - US-028
+- 添加了 POST /auth/change-password 端点：验证旧密码、检查新密码长度、更新哈希
+- 在学生信息页 (/student/info) 和教师信息页 (/teacher/info) 都添加了修改密码表单
+- 前端验证：新密码至少6位、两次输入一致
+- 添加了前端 API 函数：changePassword, adminResetPassword, teacherResetStudentPassword
+- 创建了 6 个测试：成功修改、旧密码错误、新密码太短、空字段、未认证 401、修改后登录验证
+- TypeScript 类型检查通过，所有 6 个测试通过
+- Changed files: backend/app/api/routers/auth.py, backend/tests/unit/test_change_password.py, frontend/lib/api.ts, frontend/app/student/info/page.tsx, frontend/app/teacher/info/page.tsx
+---
+
+## 2026-04-17 21:00 - US-029
+- 添加了 POST /teacher/students/{student_user_id}/reset-password 端点
+- 教师只能重置绑定学生的密码，通过 _ensure_teacher_can_access_student 验证
+- 管理员可以通过此端点或已有的 PUT /admin/users/{id} 重置任何用户密码
+- 新密码至少6位验证
+- 创建了 8 个测试：管理员重置成功、管理员重置不存在用户、教师重置绑定学生、教师重置未绑定学生 403、新密码太短、学生角色 403、未认证 401、管理员通过教师端点重置
+- 所有 8 个测试通过
+- Changed files: backend/app/api/routers/teacher.py, backend/tests/unit/test_password_reset_boundaries.py
+---
+
+## 2026-04-17 21:15 - US-030
+- 创建了 frontend/lib/format.ts 共享格式化工具：
+  - formatTime(): 统一 ISO8601 → "YYYY/MM/DD HH:mm" (Asia/Shanghai 时区)
+  - formatRelativeTime(): 相对时间（"刚刚"、"5分钟前"、"3天前"）
+  - formatShortDate(): 短日期用于图表标签
+  - REPORT_STATUS_MAP / ANALYSIS_STATUS_MAP / FOLLOWUP_STATUS_MAP: 统一状态标签和颜色映射
+- 更新了 6 个前端页面使用共享工具替代本地格式化函数：
+  - admin/users, admin/jobs, admin/stats, student/history, student/profile, results/[id]
+- TypeScript 类型检查通过
+- Changed files: frontend/lib/format.ts (新建), frontend/app/admin/users/page.tsx, frontend/app/admin/jobs/page.tsx, frontend/app/admin/stats/page.tsx, frontend/app/student/history/page.tsx, frontend/app/student/profile/page.tsx, frontend/app/results/[id]/page.tsx
+---
+
+## 2026-04-17 21:30 - US-031
+- 验证了所有 31 个 user story 均已通过
+- TypeScript 类型检查：0 错误
+- 23 个新增后端测试全部通过（9 统计聚合 + 6 修改密码 + 8 密码重置边界）
+- 无代码变更，仅验证
+- Changed files: scripts/ralph/prd.json
+---
