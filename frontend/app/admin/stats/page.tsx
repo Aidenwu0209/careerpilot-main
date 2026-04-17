@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarDrawer } from "@/components/SidebarDrawer";
 import { Icon } from "@/components/Icon";
+import { formatShortDate } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
   getAdminStatsOverview,
@@ -29,12 +30,7 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
 ];
 
 function formatDateLabel(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  } catch {
-    return dateStr;
-  }
+  return formatShortDate(dateStr + "T00:00:00");
 }
 
 export default function AdminStatsPage() {

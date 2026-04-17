@@ -17,6 +17,7 @@ import {
   type UploadedFileInfo,
 } from "@/lib/api";
 import { Icon } from "@/components/Icon";
+import { formatTime as formatTimeUtil } from "@/lib/format";
 
 const CAPABILITY_LABELS: Record<string, string> = {
   innovation: "创新能力",
@@ -27,9 +28,7 @@ const CAPABILITY_LABELS: Record<string, string> = {
 };
 
 function formatTime(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatTimeUtil(iso);
 }
 
 function CapabilityBar({ label, value }: { label: string; value: number }) {

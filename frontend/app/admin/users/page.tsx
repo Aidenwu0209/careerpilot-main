@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarDrawer } from "@/components/SidebarDrawer";
+import { formatTime } from "@/lib/format";
 import { Icon } from "@/components/Icon";
 import {
   createAdminUser,
@@ -89,16 +90,7 @@ export default function AdminUsersPage() {
     router.push("/login");
   };
 
-  const formatDate = (iso: string | null) => {
-    if (!iso) return "-";
-    return new Date(iso).toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = formatTime;
 
   const resetForm = () => {
     setEditingId(null);

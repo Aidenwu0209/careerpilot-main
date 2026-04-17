@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { formatTime } from "@/lib/format";
 import Markdown from "react-markdown";
 import {
   API_BASE,
@@ -367,7 +368,7 @@ export default function ResultPage() {
                       </div>
                       {fb.created_at && (
                         <span style={{ fontSize: "0.75rem", color: "var(--subtle)" }}>
-                          {new Date(fb.created_at).toLocaleString("zh-CN")}
+                          {formatTime(fb.created_at)}
                         </span>
                       )}
                     </div>
