@@ -244,3 +244,23 @@
   - Matching 记录的所有权通过 `StudentProfile.student_id` 间接验证（MatchResult → StudentProfile → Student），需要 JOIN 查询
   - 所有 6 种记录类型都有跨学生禁止测试（cross_student_forbidden），确保所有权隔离
 ---
+
+## 2026-04-17 09:05 - US-012
+- 添加了历史/当前数据标签到所有学生端详情页面：
+  - **匹配分析页**：标题旁显示"历史数据"（琥珀色）或"当前最新"（绿色）badge
+  - **职业路径页**：同上，统一标签样式
+  - **能力画像页**：标题旁显示"历史画像"或"当前最新"badge，保留原有的详细版本信息条和"返回当前"按钮
+  - **完整报告页**：标题旁显示"历史报告"或"当前最新"badge，通过 `?source=history` URL 参数检测
+- 修复了历史记录页的导航链接：
+  - 上传类型：`/student/upload`（不存在）→ `/student`
+  - 画像类型：添加 `&source=history` 参数
+  - 报告类型：添加 `?source=history` 参数
+- 统一了所有页面的标签样式：历史用琥珀色（`#b45309`），当前用绿色（`#166534`），圆角 pill badge
+- TypeScript 类型检查通过
+- Changed files: `frontend/app/student/history/page.tsx`, `frontend/app/student/matching/page.tsx`, `frontend/app/student/path/page.tsx`, `frontend/app/student/profile/page.tsx`, `frontend/app/results/[id]/page.tsx`
+- **未来迭代的学习：**
+  - 历史页面 `getHistoryItemLink()` 是所有历史导航的入口，新增记录类型必须在此函数中添加对应的路由
+  - `?source=history` 参数用于标识从历史页进入，但 matching/path 使用 `?history={composite_id}` 格式，report/profile 使用 `?source=history` 格式——两种方式都能触发 `isHistoricalView=true`
+  - Profile 页面有两层标签系统：标题 badge（始终可见）和详细版本信息条（含版本号和返回按钮），互不冲突
+  - 需要手动浏览器验证：从历史页点击不同类型记录，确认标签显示和内容切换
+---
