@@ -548,6 +548,79 @@ export async function deleteAdminUser(userId: number): Promise<void> {
   await request(`/admin/users/${userId}`, { method: "DELETE" });
 }
 
+// --- Admin Position (JobProfile) CRUD ---
+
+export type AdminPosition = {
+  id: number;
+  job_code: string;
+  title: string;
+  summary: string;
+  skill_requirements: string[];
+  certificate_requirements: string[];
+  innovation_requirements: string;
+  learning_requirements: string;
+  resilience_requirements: string;
+  communication_requirements: string;
+  internship_requirements: string;
+  capability_scores: Record<string, number>;
+  dimension_weights: Record<string, number>;
+  explanation_json: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AdminPositionInput = {
+  job_code: string;
+  title: string;
+  summary?: string;
+  skill_requirements?: string[];
+  certificate_requirements?: string[];
+  innovation_requirements?: string;
+  learning_requirements?: string;
+  resilience_requirements?: string;
+  communication_requirements?: string;
+  internship_requirements?: string;
+  capability_scores?: Record<string, number>;
+  dimension_weights?: Record<string, number>;
+  explanation_json?: Record<string, unknown>;
+};
+
+export async function getAdminPositions(params: { keyword?: string; skip?: number; limit?: number } = {}): Promise<{ total: number; items: AdminPosition[] }> {
+  const qs = new URLSearchParams();
+  if (params.keyword) qs.set("keyword", params.keyword);
+  if (params.skip !== undefined) qs.set("skip", String(params.skip));
+  if (params.limit !== undefined) qs.set("limit", String(params.limit));
+  const query = qs.toString();
+  const path = `/admin/positions${query ? `?${query}` : ""}`;
+  const res = await request<{ data: { total: number; items: AdminPosition[] } }>(path);
+  return res.data;
+}
+
+export async function getAdminPosition(positionId: number): Promise<AdminPosition> {
+  const res = await request<{ data: AdminPosition }>(`/admin/positions/${positionId}`);
+  return res.data;
+}
+
+export async function createAdminPosition(data: AdminPositionInput): Promise<AdminPosition> {
+  const res = await request<{ data: AdminPosition }>("/admin/positions", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
+export async function updateAdminPosition(positionId: number, data: Partial<AdminPositionInput>): Promise<AdminPosition> {
+  const res = await request<{ data: AdminPosition }>(`/admin/positions/${positionId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return res.data;
+}
+
+export async function deleteAdminPosition(positionId: number): Promise<void> {
+  await request(`/admin/positions/${positionId}`, { method: "DELETE" });
+}
+
 export type AdminStatsOverview = {
   total_users: number;
   total_jobs: number;
