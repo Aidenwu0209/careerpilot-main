@@ -264,3 +264,22 @@
   - Profile 页面有两层标签系统：标题 badge（始终可见）和详细版本信息条（含版本号和返回按钮），互不冲突
   - 需要手动浏览器验证：从历史页点击不同类型记录，确认标签显示和内容切换
 ---
+
+## 2026-04-17 09:42 - US-013
+- 实现了历史聊天回放 UI 的完整功能：
+  - 进入历史对话时备份当前聊天消息到 `chat_messages_current_backup` localStorage 键，防止当前对话被覆盖
+  - 保存消息到 localStorage 时跳过历史视图（`isHistoricalChatView` 检查），避免历史消息污染当前消息存储
+  - 添加"返回当前对话"按钮，从备份恢复当前聊天消息并导航回 `/student`
+  - 历史对话模式下禁用输入区域，显示"只读模式"提示
+  - 增强历史对话横幅：显示"正在查看历史对话记录（只读）"和返回按钮
+  - "开启新话题"按钮在历史视图中自动清理备份并导航回 `/student`
+  - 清理 effect：非历史视图时自动清理残留的 backup localStorage 键
+- TypeScript 类型检查通过，74 个相关单元测试通过，无回归
+- Changed files: `frontend/app/student/page.tsx`
+- **未来迭代的学习：**
+  - 历史聊天通过 `?history=chat-{ChatMessageRecord.id}` URL 参数加载，后端 `/chat/history/{id}` 返回 ±5 分钟窗口内的消息
+  - 使用 localStorage 备份键（`chat_messages_current_backup:user:{id}`）而非 React state 来保存当前消息，这样跨页面导航和页面刷新都能正确恢复
+  - `isHistoricalChatView` 已提前计算为组件级变量，所有 effect 和 JSX 都可直接引用
+  - 在 `useCallback` 中使用 `router.push("/student")` 可以在同一 App Router 页面内更新 URL 参数而不导致组件卸载
+  - 需要手动浏览器验证：从历史页点击聊天记录 → 查看历史消息 → 点击返回当前对话 → 确认当前消息恢复
+---
