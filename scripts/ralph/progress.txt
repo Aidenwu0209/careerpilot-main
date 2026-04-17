@@ -323,3 +323,37 @@
   - `/student/info` 页面已有完整的教师绑定更新 UI，teacher_code 为空时不改变现有绑定
   - 测试中 API 路径前缀为 `/api/v1/`，不要忘记
 ---
+
+## 2026-04-17 23:30 - US-016
+- 验证了教师仪表盘后端 `/teacher/stats/overview`、`/teacher/students/reports`、`/teacher/stats/match-distribution` 三个端点均已使用真实数据库查询，无 demo 数据硬编码
+- 验证了 `_get_teacher_bound_student_ids()` 正确隔离教师数据：无绑定学生返回空列表，所有计数为 0
+- 创建了 `test_teacher_dashboard_real_metrics.py` 包含 12 个测试：
+  - 3 个零状态测试（overview 全零、reports 空列表、distribution 全零）
+  - 5 个非零状态测试（overview 字段完整性、数值边界、列表与汇总一致性、distribution 格式、distribution 总和与 totals 一致）
+  - 4 个访问控制测试（overview/reports/distribution 未认证 401、学生角色 403）
+- TypeScript 类型检查通过，22 个教师相关测试全部通过
+- Changed files: `backend/tests/unit/test_teacher_dashboard_real_metrics.py`
+- **未来迭代的学习：**
+  - 教师仪表盘数据源有三个独立端点：overview（7 项指标卡）、students/reports（学生报告表格）、match-distribution（分数分布柱状图），前端通过 Promise.all 并行加载
+  - `_get_teacher_bound_student_ids()` 对 admin 返回 None（不过滤），对无 Teacher 记录的教师返回空列表（零状态），对有绑定但无 active 链接的教师也返回空列表
+  - `total_students` 统计的是有 Student 记录的绑定学生数，不是 TeacherStudentLink 的行数（两者可能不一致，因为 Student 是注册时自动创建的）
+  - 测试中创建新教师可直接用 `/api/v1/auth/register` + role=teacher，会自动创建 Teacher 记录
+  - 已有 seed 数据中 teacher_demo 已绑定 35 个学生，适合非零状态测试
+---
+
+## 2026-04-17 12:47 - US-017
+- 验证了 US-017 所有验收标准已在之前的迭代中实现完毕，无需新增代码
+- 现有功能覆盖：
+  - `TeacherComment` 模型包含 teacher_id, student_id, comment, visible_to_student, follow_up_status, next_follow_up_date 等所有必需字段
+  - 教师端 POST/PUT `/reports/{report_id}/comments` 端点支持创建和更新 advice，包含 follow-up 状态和日期
+  - 学生端 `GET /me/teacher-feedback` 端点仅返回 `visible_to_student=True` 的 advice
+  - `_ensure_teacher_can_access_student` 确保教师只能操作绑定学生的 advice
+- 13 个 teacher advice/followup 测试全部通过（test_teacher_advice_followup.py）
+- TypeScript 类型检查通过
+- 无代码变更
+- **未来迭代的学习：**
+  - US-017 的功能分散在 `TeacherComment` CRUD 端点和 `students.py` 的 teacher-feedback 端点中，不是独立的 advice 模块
+  - `TeacherComment.follow_up_status` 支持 7 种状态：pending, in_progress, completed, overdue, read, communicated, review
+  - 学生端 history 中 feedback 类型对应 `FollowupRecord`，而非 `TeacherComment`——两者是不同的数据模型
+  - `TeacherComment` 的 advice 和 follow-up 功能是耦合在 comments CRUD 中的，没有独立的 advice 实体
+---
