@@ -14,6 +14,11 @@
 - NOT NULL constraints: TeacherComment.report_id, Resume.student_id — always provide valid values in test fixtures
 - CORS safety: global exception handler in main.py explicitly adds CORS headers to 500 responses as a belt-and-suspenders approach; endpoints that call LLM or complex DB queries must wrap all failure-prone operations in try/except
 - Trailing slash rule: api_router uses `redirect_slashes=False`; all frontend calls to routes defined as `@router.get("/")` MUST include trailing slash (e.g., `/files/` not `/files`). Sub-paths like `/files/upload` are unaffected.
+- SQLite ALTER TABLE limitations: SQLite does not support ADD COLUMN IF NOT EXISTS; always check column existence before adding. Model changes require manual DB migration for SQLite.
+- Backend API response unwrapping: `request<T>()` returns `{data: ...}` wrapped in `APIResponse`; each API function must unwrap at call site. Teacher comment CRUD returns data in `res.data` (array for list, object for create/update).
+- Teacher comment CRUD pattern: `createTeacherComment(reportId, text, options)`, `getTeacherComments(reportId)`, `updateTeacherComment(commentId, data)`, `deleteTeacherComment(commentId)` — all in `api.ts`. Student feedback: `getStudentTeacherFeedback()`, `markFeedbackRead(commentId)`.
+- `TeacherStudentLink` soft-delete: removal sets `status="inactive"` instead of physical deletion; always filter by `status="active"` when querying bound students.
+- Teacher record auto-creation: when a teacher user has no `Teacher` record yet, endpoints must auto-create one before operating on teacher-specific tables.
 
 ## 2026-04-17 01:00 - US-001
 - Implemented role route guard matrix with visible notice on cross-role redirect
@@ -356,4 +361,49 @@
   - `TeacherComment.follow_up_status` 支持 7 种状态：pending, in_progress, completed, overdue, read, communicated, review
   - 学生端 history 中 feedback 类型对应 `FollowupRecord`，而非 `TeacherComment`——两者是不同的数据模型
   - `TeacherComment` 的 advice 和 follow-up 功能是耦合在 comments CRUD 中的，没有独立的 advice 实体
+---
+
+## 2026-04-17 13:18 - US-018
+- 在教师报告详情页 (`/teacher/reports/page.tsx`) 添加了完整的教师点评与跟进 UI
+  - 新建点评表单：textarea、优先级选择器（低/普通/高/紧急）、对学生可见 checkbox、提交按钮
+  - 点评列表：显示教师名、优先级 badge、时间戳、内容、跟进状态、已读状态
+  - 编辑模式：支持修改内容、优先级、可见性、跟进状态（7种）和下次跟进日期
+  - 删除功能：带确认对话框
+- 在学生报告页 (`/results/[id]/page.tsx`) 添加了教师点评展示区
+  - 使用 `SectionCard` 组件，加载 `visible_to_student=true` 的点评
+  - 自动标记未读反馈为已读（`markFeedbackRead`）
+  - 按当前 report_id 过滤，仅显示与本报告相关的反馈
+- 更新 `api.ts` 中的类型和函数签名
+  - `TeacherCommentItem` 添加 `follow_up_status` 和 `next_follow_up_date` 字段
+  - `createTeacherComment` 改为 options 对象参数，支持 `follow_up_status` 和 `next_follow_up_date`
+  - `updateTeacherComment` 添加 `follow_up_status` 和 `next_follow_up_date` 参数
+- 修复了 `teacher_comments` 表缺少 `follow_up_status` 和 `next_follow_up_date` 列的数据库迁移问题
+- TypeScript 类型检查通过（0 错误），38 个教师相关测试通过
+- 浏览器测试通过：教师登录 → 选择学生 → 打开报告 → 创建点评 → 编辑点评设置跟进状态 → 保存 → 确认跟进状态显示
+- Changed files: `frontend/lib/api.ts`, `frontend/app/teacher/reports/page.tsx`, `frontend/app/results/[id]/page.tsx`
+- **未来迭代的学习：**
+  - `teacher_comments` 表的 `follow_up_status` 和 `next_follow_up_date` 列是在 US-018 中手动添加的（ALTER TABLE），如果使用 Alembic 迁移应该创建正式的 migration 脚本
+  - `createTeacherComment` 的 API 返回不包含 `teacher_name`、`student_id` 等字段（仅返回 id, comment, priority, visible_to_student, follow_up_status, next_follow_up_date, created_at），前端用 `as TeacherCommentItem` 强制转换，但这些缺失字段不影响显示
+  - 学生报告页 `/results/[id]` 的 `dev-bypass` token（user_id=1）可能不是学生角色，导致报告 API 返回 500，需要用正式学生账号测试
+  - `getStudentTeacherFeedback()` 返回的是该学生的所有反馈，前端按 `report_id` 过滤只显示当前报告的
+---
+
+## 2026-04-17 13:42 - US-019
+- 在 `teacher.py` 中添加了 3 个花名册管理端点：
+  - `GET /teacher/roster/search` — 按关键词搜索候选学生（username/email/full_name/major/grade），标记已绑定状态
+  - `POST /teacher/roster/{student_id}` — 将学生绑定到教师班级，支持 group_name 参数
+  - `DELETE /teacher/roster/{student_id}` — 将学生从班级移除（设为 inactive）
+- 跨教师绑定保护：已绑定到其他教师的学生无法被重复绑定（403）
+- 重复绑定保护：已在当前教师班级的学生返回 409
+- 创建了 `test_teacher_roster_management.py` 包含 21 个测试：
+  - 8 个搜索测试（按 username/email/major/grade 搜索、已绑定标记、空关键词、角色/认证拦截）
+  - 7 个添加测试（成功添加、带分组名、重复绑定 409、跨教师绑定 403、不存在学生 404、角色/认证拦截）
+  - 6 个移除测试（成功移除设为 inactive、未绑定 404、不存在 404、跨教师 404、角色/认证拦截）
+- 所有 21 个测试通过，111 个已有教师测试通过（9 个预先存在的失败与本次无关）
+- Changed files: `backend/app/api/routers/teacher.py`, `backend/tests/unit/test_teacher_roster_management.py`
+- **未来迭代的学习：**
+  - `TeacherStudentLink` 的删除采用 soft-delete 模式（status 设为 "inactive"），而非物理删除，保留历史记录
+  - 搜索端点通过 `Student.user_id IN (匹配的 user_ids) OR Student.major/grade ILIKE` 联合查询，确保 username/email 和 major/grade 都能匹配
+  - 教师花名册管理的 Teacher 记录可能不存在（新注册教师），需要自动创建
+  - `already_bound` 字段帮助前端区分"可添加"和"已在我的班级中"
 ---
