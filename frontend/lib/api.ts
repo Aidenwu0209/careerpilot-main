@@ -1151,3 +1151,29 @@ export async function markAnalysisComplete(runId: number): Promise<AnalysisRunSt
 export async function resetAnalysisRun(runId: number): Promise<AnalysisRunState> {
   return request<AnalysisRunState>(`/analysis/${runId}/reset`, { method: "POST" });
 }
+
+// --- Password change (US-028) ---
+
+export async function changePassword(oldPassword: string, newPassword: string): Promise<{ message: string }> {
+  const res = await request<{ message: string }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  });
+  return res;
+}
+
+export async function adminResetPassword(userId: number, newPassword: string): Promise<{ message: string }> {
+  const res = await request<{ message: string }>(`/admin/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify({ password: newPassword }),
+  });
+  return res;
+}
+
+export async function teacherResetStudentPassword(studentUserId: number, newPassword: string): Promise<{ message: string }> {
+  const res = await request<{ message: string }>(`/teacher/students/${studentUserId}/reset-password`, {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+  return res;
+}

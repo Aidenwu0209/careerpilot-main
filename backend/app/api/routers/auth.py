@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.core.errors import raise_invalid_credentials
 from app.models import User
 from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest
-from app.services.auth_service import authenticate, register_user
+from app.services.auth_service import authenticate, hash_password, register_user, verify_password
 
 router = APIRouter()
 
@@ -69,3 +69,27 @@ def me(current_user: User = Depends(get_current_user)) -> LoginResponse:
         username=current_user.username,
         full_name=current_user.full_name,
     )
+
+
+@router.post("/change-password")
+def change_password(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+):
+    old_password = payload.get("old_password", "")
+    new_password = payload.get("new_password", "")
+
+    if not old_password or not new_password:
+        raise HTTPException(status_code=400, detail="旧密码和新密码不能为空")
+
+    if not verify_password(old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="旧密码不正确")
+
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码至少6位")
+
+    current_user.password_hash = hash_password(new_password)
+    db.commit()
+
+    return {"message": "密码修改成功"}
