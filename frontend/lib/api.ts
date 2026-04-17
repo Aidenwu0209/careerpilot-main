@@ -850,6 +850,48 @@ export async function markFeedbackRead(commentId: number): Promise<{ ok: boolean
   return request(`/students/me/teacher-feedback/${commentId}/read`, { method: "POST" });
 }
 
+// --- Teacher Roster Management ---
+
+export type RosterCandidate = {
+  student_id: number;
+  user_id: number;
+  username: string;
+  full_name: string;
+  email: string;
+  major: string;
+  grade: string;
+  already_bound: boolean;
+};
+
+export type RosterAddResult = {
+  id: number;
+  teacher_id: number;
+  student_id: number;
+  group_name: string;
+  source: string;
+  status: string;
+  created_at: string | null;
+};
+
+export type RosterRemoveResult = {
+  removed: boolean;
+  student_id: number;
+};
+
+export async function searchRosterCandidates(keyword: string): Promise<RosterCandidate[]> {
+  const res = await request<{ data: RosterCandidate[] }>(`/teacher/roster/search?keyword=${encodeURIComponent(keyword)}`);
+  return res.data;
+}
+
+export async function addStudentToRoster(studentId: number, groupName?: string): Promise<RosterAddResult> {
+  const query = groupName ? `?group_name=${encodeURIComponent(groupName)}` : "";
+  return request(`/teacher/roster/${studentId}${query}`, { method: "POST" });
+}
+
+export async function removeStudentFromRoster(studentId: number): Promise<RosterRemoveResult> {
+  return request(`/teacher/roster/${studentId}`, { method: "DELETE" });
+}
+
 export type RecommendedJob = {
   job_code: string;
   title: string;
