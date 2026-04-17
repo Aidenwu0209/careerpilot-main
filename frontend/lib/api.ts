@@ -490,6 +490,17 @@ export type AdminUser = {
   email: string;
   created_at: string | null;
   updated_at: string | null;
+  profile?: {
+    student_id?: number;
+    major?: string;
+    grade?: string;
+    career_goal?: string;
+    target_job_code?: string;
+    learning_preferences?: Record<string, unknown>;
+    teacher_id?: number;
+    department?: string;
+    title?: string;
+  };
 };
 
 export type AdminUserInput = {
@@ -500,8 +511,15 @@ export type AdminUserInput = {
   email: string;
 };
 
-export async function getAdminUsers(): Promise<{ total: number; items: AdminUser[] }> {
-  const res = await request<{ data: { total: number; items: AdminUser[] } }>("/admin/users");
+export async function getAdminUsers(params?: { keyword?: string; role?: string; skip?: number; limit?: number }): Promise<{ total: number; items: AdminUser[] }> {
+  const qs = new URLSearchParams();
+  if (params?.keyword) qs.set("keyword", params.keyword);
+  if (params?.role) qs.set("role", params.role);
+  if (params?.skip) qs.set("skip", String(params.skip));
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString();
+  const path = `/admin/users${query ? `?${query}` : ""}`;
+  const res = await request<{ data: { total: number; items: AdminUser[] } }>(path);
   return res.data;
 }
 
