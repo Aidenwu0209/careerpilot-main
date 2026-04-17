@@ -2242,8 +2242,10 @@ a[aria-label] {
 }
 
 .student-main__pipeline-wrap {
-  max-width: 720px;
+  max-width: 768px;
   margin: 0 auto 16px;
+  padding: 0 24px;
+  width: 100%;
 }
 
 .student-main__pipeline-error-banner {
@@ -3467,9 +3469,10 @@ a[aria-label] {
    STUDENT ONBOARDING GUIDE
    =========================== */
 .student-onboarding-guide {
-  max-width: 720px;
+  max-width: 768px;
   margin: 12px auto 8px;
   padding: 0 24px;
+  width: 100%;
 }
 
 .student-onboarding-guide__inner {
@@ -3569,6 +3572,10 @@ a[aria-label] {
 }
 
 @media (max-width: 768px) {
+  .student-main__pipeline-wrap {
+    padding: 0 12px;
+  }
+
   .student-onboarding-guide {
     padding: 0 12px;
     margin: 8px auto 6px;
@@ -3593,9 +3600,10 @@ a[aria-label] {
    TEACHER BINDING NOTICE (unbound student)
    =========================== */
 .student-teacher-binding-notice {
-  max-width: 720px;
+  max-width: 768px;
   margin: 0 auto 16px;
-  padding: 0 16px;
+  padding: 0 24px;
+  width: 100%;
 }
 
 .student-teacher-binding-notice__inner {
@@ -3647,7 +3655,7 @@ a[aria-label] {
 
 @media (max-width: 600px) {
   .student-teacher-binding-notice {
-    padding: 0 8px;
+    padding: 0 12px;
   }
 }
 
