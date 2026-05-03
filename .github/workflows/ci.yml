@@ -36,10 +36,11 @@ jobs:
             New-Item -ItemType File -Path "$env:USERPROFILE\.ssh\known_hosts" | Out-Null
           }
           if (Get-Command ssh-keyscan -ErrorAction SilentlyContinue) {
-            try {
-              ssh-keyscan github.com | Out-File -Append "$env:USERPROFILE\.ssh\known_hosts"
-            } catch {
-              Write-Host "ssh-keyscan failed, continue with fallback."
+            $scanOutput = & ssh-keyscan github.com 2>$null
+            if ($LASTEXITCODE -eq 0 -and $scanOutput) {
+              $scanOutput | Out-File -Append "$env:USERPROFILE\.ssh\known_hosts"
+            } else {
+              Write-Host "ssh-keyscan failed or no host keys returned, continue."
             }
           }
 
