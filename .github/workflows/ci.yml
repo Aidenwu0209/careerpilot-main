@@ -36,7 +36,11 @@ jobs:
             New-Item -ItemType File -Path "$env:USERPROFILE\.ssh\known_hosts" | Out-Null
           }
           if (Get-Command ssh-keyscan -ErrorAction SilentlyContinue) {
-            ssh-keyscan github.com | Out-File -Append "$env:USERPROFILE\.ssh\known_hosts"
+            try {
+              ssh-keyscan github.com | Out-File -Append "$env:USERPROFILE\.ssh\known_hosts"
+            } catch {
+              Write-Host "ssh-keyscan failed, continue with fallback."
+            }
           }
 
       - name: Checkout repository
