@@ -28,8 +28,19 @@ jobs:
       STORAGE_PROVIDER: local
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
     steps:
+      - name: Prepare git SSH trust
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.ssh" | Out-Null
+          if (-not (Test-Path "$env:USERPROFILE\.ssh\known_hosts")) {
+            New-Item -ItemType File -Path "$env:USERPROFILE\.ssh\known_hosts" | Out-Null
+          }
+          ssh-keyscan github.com | Out-File -Append "$env:USERPROFILE\.ssh\known_hosts"
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ssh-strict: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
