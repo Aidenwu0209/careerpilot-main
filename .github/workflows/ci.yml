@@ -13,13 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  windows-self-hosted-ci:
-    name: Windows Self-Hosted CI
-    runs-on:
-      - self-hosted
-      - Windows
-      - X64
-    timeout-minutes: 45
+  windows-ci:
+    name: Windows GitHub-Hosted CI
+    runs-on: windows-latest
+    timeout-minutes: 90
     env:
       LLM_PROVIDER: mock
       OCR_PROVIDER: mock
